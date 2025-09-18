@@ -95,6 +95,8 @@ python youtube_downloader.py "https://youtube.com/watch?v=..."
 - The orange columns (labelled 2 & 3) display the file type as in audio or video. You need one of each!
 - Then, in the red column (labelled number 3) is the ID. This contains the numbers you will use to choose the resolution.
 - The one column left out just shows the size of the file.
+- Sometimes a video will show no format options, so just press enter and it will attempt the default "best" choices.  
+(I've only noticed this sometimes with instagram reels.)
   
   Once you have decided on a resolution you want to play, and you have settled on one video and one audio track, type e.g. 303+251, then enter. I always choose 1080p as that's the max res of my screens.  
 ## Configuration
