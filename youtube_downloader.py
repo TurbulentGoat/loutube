@@ -11,9 +11,79 @@ from pathlib import Path
 DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "ytd-video")
 DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "ytd-music")
 
+def display_logo():
+    """Display ASCII art logo for the program."""
+    try:
+        # Get the script directory and logo path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(script_dir, "loutube.png")
+        
+        if os.path.exists(logo_path):
+            # Use ascii-image-converter command exactly as provided
+            command = [
+                "ascii-image-converter", 
+                "-C", 
+                "-m", "+* #%@", 
+                logo_path, 
+                "-W", "125", 
+                "--complex"
+            ]
+            
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print(result.stdout)
+                return
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    except Exception:
+        pass
+    
+    # Fallback: Use the pre-generated ASCII art if ascii-image-converter is not available
+    fallback_ascii = """+++++********************************++++++++++++++++++++++++++++++++++++++++++***********++++++++++++*### +++++++++++++++++++
++*************************************++++++#@@@ ++++++++++++++++++++++++++++*@@@@@@@@@@@@+++++++++++ @@@#+++++++++++++++++++
++***************** ********************+++++#@@@#+++++++++++++++++++++++++++++   #@@@@   *+++++++++++ @@@#+++++++++++++++++++
+***************  ***** ****************+++++#@@@ ++++++++++****+++++++++++++++++++@@@%+++++++++++++++ @@@ +****+++++++****+++
+*************** @@%# *******************++++#@@@ +++++++*%@@@@@@%*++%@@@*++@@@@++*@@@%++ @@@%++ @@@#+ @@@%%@@@@%+++*%@@@@@@%+
+*************** @@@@@%#  ***************++++#@@@ +++++++@@@%++%@@@++%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@@*+#@@@#+*@@@#+*@@@%
+*************** @@@@@@@@@# *************++++#@@@ ++++++ @@@#++#@@@ +%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@%+#@@@*++@@@@
+*************** @@@@@%#  ***************++++#@@@ ++++++#@@@#++#@@@#+%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@@+#@@@% #@@@@
+*************** @@%# *******************++++#@@@#++++++#@@@#++#@@@#+%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@@+#@@@%%%####
+***************  ***** ****************+++++#@@@ ++++++#@@@#++#@@@ +%@@@*++@@@@++*@@@%++ @@@%++ @@@#+ @@@ ++*@@@%+#@@@*++****
++***************** ********************+++++#@@@#*****+*@@@%++%@@@++%@@@ + @@@@++*@@@%++*@@@%++%@@@#+ @@@%++%@@@#+*@@@#++@@@@
++*************************************++++++#@@@@@@@@@*+ %@@@@@@%*++*@@@@@%#@@@++*@@@%+++#@@@@@#@@@#+ @@@%@@@@@#+++ @@@@@@@%+
+++++********************************++++++++**********++++**  *+++++++*  *++***+++****++++** *++***+++***++***+++++++** **+++"""
+    
+    print(fallback_ascii)
+
 # Global variable to cache browser cookies
 _cached_browser_cookies = None
 _cookies_checked = False
+
+def get_brave_snap_path():
+    """
+    Get a generic Brave browser snap path by detecting the user's home directory
+    and finding the active Brave snap profile.
+    Returns the Brave browser path or None if not found.
+    """
+    try:
+        import glob
+        
+        # Get current user's home directory
+        home_dir = str(Path.home())
+        
+        # Look for Brave snap directories (they have version numbers)
+        brave_snap_pattern = os.path.join(home_dir, "snap", "brave", "*", ".config", "BraveSoftware", "Brave-Browser", "Default")
+        brave_paths = glob.glob(brave_snap_pattern)
+        
+        if brave_paths:
+            # Sort by version number (highest first) and return the most recent
+            brave_paths.sort(key=lambda x: int(x.split("/")[-5]) if x.split("/")[-5].isdigit() else 0, reverse=True)
+            # Format as brave:path for yt-dlp
+            return f"brave:{brave_paths[0]}"
+        
+        return None
+    except (ImportError, IndexError, ValueError, OSError):
+        return None
 
 def get_browser_cookies_fast():
     """
@@ -31,9 +101,10 @@ def get_browser_cookies_fast():
     # Common browser paths by OS  
     browser_paths = {
         'linux': [  # Linux
+            ('brave-snap', get_brave_snap_path()),  # Generic Brave snap path (try first)
+            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
-            ('brave', 'brave'),
             ('chromium', 'chromium'),
             ('edge', 'edge'),
         ],
@@ -58,9 +129,12 @@ def get_browser_cookies_fast():
     
     # Quick test - just check if yt-dlp recognizes the browser option (much faster than full simulation)
     for browser_name, browser_key in browser_paths[system]:
+        # Skip if browser_key is None (e.g., when Brave snap path not found)
+        if browser_key is None:
+            continue
+            
         try:
-            # Just test if yt-dlp accepts the browser option - much faster than simulate
-            # Using --version is faster and more reliable than --help
+            # Just test if yt-dlp accepts the browser option
             test_command = [
                 "yt-dlp", 
                 "--cookies-from-browser", browser_key,
@@ -99,21 +173,71 @@ def is_playlist(url):
     return "list" in query_params
 
 def list_formats(url, browser_cookies=None):
-    """List available formats for a video, filtering out m3u8 and mp4 formats."""
+    """List available formats for a video, filtering out m3u8 and mp4 formats and unwanted columns."""
     command = build_base_command(url, browser_cookies)
     command.extend(["--list-formats", url])
     
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=30)
-        # Filter out m3u8 and mp4 formats from the output
+        # Filter out m3u8 and mp4 formats from the output and format columns
         filtered_lines = []
         for line in result.stdout.split('\n'):
             if ('m3u8' not in line.lower() and 'mp4' not in line.lower()) or 'ID' in line or 'format code' in line.lower() or '---' in line:
-                filtered_lines.append(line)
+                # Parse and filter columns for each line
+                filtered_line = filter_format_columns(line)
+                if filtered_line:
+                    filtered_lines.append(filtered_line)
         return '\n'.join(filtered_lines)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"Error: Failed to list formats.\n{e}")
         return None
+
+def filter_format_columns(line):
+    """Filter format line to show only ID, FILESIZE, VCODEC, ACODEC, and MORE columns."""
+    # Skip empty lines
+    if not line.strip():
+        return ""
+    
+    # Handle header line
+    if 'ID' in line and 'FILESIZE' in line:
+        # Create simplified header
+        return "ID       FILESIZE    VCODEC       ACODEC       MORE"
+    
+    # Handle separator line
+    if '---' in line:
+        return "---      --------    ------       ------       ----"
+    
+    # Parse yt-dlp format which uses pipe separators |
+    # Format: ID EXT RESOLUTION FPS CH | FILESIZE TBR PROTO | VCODEC VBR ACODEC ABR ASR MORE INFO
+    try:
+        # Split by pipe separators
+        if '|' in line:
+            sections = line.split('|')
+            if len(sections) >= 3:
+                # Section 1: ID EXT RESOLUTION FPS CH
+                first_section = sections[0].strip().split()
+                id_part = first_section[0] if len(first_section) > 0 else ""
+                
+                # Section 2: FILESIZE TBR PROTO
+                second_section = sections[1].strip().split()
+                filesize_part = second_section[0] if len(second_section) > 0 else ""
+                
+                # Section 3: VCODEC VBR ACODEC ABR ASR MORE INFO
+                third_section = sections[2].strip().split()
+                vcodec_part = third_section[0] if len(third_section) > 0 else ""
+                acodec_part = third_section[2] if len(third_section) > 2 else ""
+                
+                # More info is everything after ABR ASR (positions 3+)
+                more_parts = " ".join(third_section[4:]) if len(third_section) > 4 else ""
+                
+                # Format the output with consistent spacing
+                return f"{id_part:<8} {filesize_part:<11} {vcodec_part:<12} {acodec_part:<12} {more_parts}"
+        
+        # If no pipes found, return original line (might be a different format)
+        return line
+        
+    except (IndexError, ValueError):
+        return line  # Return original line if parsing fails
 
 def watch_video(url, browser_cookies=None):
     """Stream video at selected quality using VLC."""
@@ -128,12 +252,8 @@ def watch_video(url, browser_cookies=None):
         print(formats_output)
         
         print("\nEnter format selection:")
-        print("- Enter a specific format ID (e.g., '137+140' for video+audio)")
-        print("- Enter 'best' for automatic best quality")
-        print("- Enter 'worst' for lowest quality")
-        print("- Enter resolution like '720p', '1080p', etc.")
-        
-        user_format = safe_input("Format choice: ").strip()
+        print("- Enter a specific format ID (e.g., '137+140' for video+audio from the ID column)")        
+        user_format = safe_input("\nFormat choice: ").strip()
         
         if not user_format:
             format_code = "best[height>=720]/best"
@@ -327,6 +447,10 @@ def main():
     if not check_dependencies():
         return
     
+    # Display ASCII logo
+    display_logo()
+    print()
+    
     print(f"Default video directory: {DEFAULT_VIDEO_DIR}")
     print(f"Default music directory: {DEFAULT_MUSIC_DIR}")
     print("(You can modify these paths at the top of the script)")
@@ -341,7 +465,7 @@ def main():
         print("1. Watch video (stream)")
         print("2. Download video")
         print("3. Download music")
-        print("99. Quit\n")
+        print("99. Quit (can be used any time)\n")
         action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
         
@@ -357,7 +481,7 @@ def main():
             print("1. Video with audio")
             print("2. Video only (no audio)")
             print("3. Audio only (extracted from video)")
-            print("99. Quit\n")
+            print("99. Quit (can be used any time)\n")
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
@@ -379,7 +503,7 @@ def main():
         print("Select download type:\n")
         print("1. Video")
         print("2. Music")
-        print("99. Quit\n")
+        print("99. Quit (can be used any time)\n")
         choice = safe_input("Enter your choice (1, 2, or 99): ").strip()
         print("")
         if choice not in ("1", "2", "99"):
@@ -401,7 +525,7 @@ def main():
             print("1. Video with audio")
             print("2. Video only (no audio)")
             print("3. Audio only (extracted from video)")
-            print("99. Quit\n")
+            print("99. Quit (can be used any time)\n")
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
