@@ -28,17 +28,17 @@ def get_browser_cookies():
             ('edge', 'edge'),
         ],
         'darwin': [  # macOS
+            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
             ('safari', 'safari'),
-            ('brave', 'brave'),
             ('edge', 'edge'),
         ],
         'windows': [
+            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
             ('edge', 'edge'),
-            ('brave', 'brave'),
         ]
     }
     
