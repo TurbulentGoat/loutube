@@ -83,14 +83,23 @@ python youtube_downloader.py "https://youtube.com/watch?v=..."
 
 **Streaming:**
 - Direct playback without downloading
-- Format selection for quality control
 - Automatic media player detection
+- Format selection for quality control
+- You'll see this screen when you select to stream a video:
+  
+  <img size=50% alt="image" src="https://github.com/user-attachments/assets/fd03c79f-57e3-4c82-b877-b9a26f86d235" />
 
+- In the screenshot above, the green column, labelled 1, shows the resolution. The further down the list it is, the higher the res. Generally the most important decider!
+- The orange columns (labelled 2 & 3) display the file type as in audio or video. You need one of each!
+- Then, in the red column (labelled number 3) is the ID. This contains the numbers you will use to choose the resolution.
+- The one column left out just shows the size of the file.
+  
+  Once you have decided on a resolution you want to play, and you have settled on one video and one audio track, type e.g. 303+251, then enter. I always choose 1080p as that's the max res of my screens.  
 ## Configuration
 
 Default download locations:
-- Videos: `~/Videos/youtube-downloads`
-- Music: `~/Music/youtube-downloads`
+- Videos: `~/Videos/ytd-video`
+- Music: `~/Music/ytd-music`
 
 You can modify these paths by editing the variables at the top of the script.
 
@@ -126,4 +135,4 @@ If you would like to help me out, I have a stripe account set up which can secur
   
 Or, if you'd rather, you can scan this QR code:  
   
-<img width="25%" alt="image" src="https://github.com/user-attachments/assets/72b7d81a-9db0-4d44-825a-db98b7100dcb" />
+<img width="20%" alt="image" src="https://github.com/user-attachments/assets/72b7d81a-9db0-4d44-825a-db98b7100dcb" />
