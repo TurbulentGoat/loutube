@@ -21,10 +21,10 @@ def get_browser_cookies():
     # Common browser paths by OS
     browser_paths = {
         'linux': [
+            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
             ('chromium', 'chromium'),
-            ('brave', 'brave'),
             ('edge', 'edge'),
         ],
         'darwin': [  # macOS
@@ -187,7 +187,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     else:
         base_output_dir = output_dir
     
-    # Ask for folder name for organization
+    # Ask for folder name
     folder_name = input("Enter folder name for this download (not track title, that's next!): ").strip()
     if not folder_name:
         folder_name = "Untitled"
