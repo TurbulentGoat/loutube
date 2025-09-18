@@ -8,8 +8,8 @@ import platform
 from pathlib import Path
 
 # Configuration - Users can modify these paths
-DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "youtube-downloads")
-DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "youtube-downloads")
+DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "yt-downloader-video")
+DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "yt-downloader-music")
 
 def get_browser_cookies():
     """
@@ -183,12 +183,26 @@ def download_video(url, browser_cookies=None, output_dir=None):
 def download_audio(url, browser_cookies=None, output_dir=None):
     """Download best audio only (e.g. for Music)."""
     if output_dir is None:
-        output_dir = DEFAULT_MUSIC_DIR
+        base_output_dir = DEFAULT_MUSIC_DIR
+    else:
+        base_output_dir = output_dir
     
+    # Ask for folder name for organization
+    folder_name = input("Enter folder name for this download (not track title, that's next!): ").strip()
+    if not folder_name:
+        folder_name = "Untitled"
+    
+    output_dir = os.path.join(base_output_dir, folder_name)
     os.makedirs(output_dir, exist_ok=True)
-    title = input("Track title (or press Enter for auto-generated): ").strip()
     
-    output_template = os.path.join(output_dir, f"{title}.%(ext)s") if title else os.path.join(output_dir, "%(title)s.%(ext)s")
+    if is_playlist(url):
+        # For playlists, let yt-dlp use automatic titles
+        output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
+        print(f"Downloading playlist - using automatic track titles in folder '{folder_name}'")
+    else:
+        # For single tracks, also use automatic title (same as playlists)
+        output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
+        print(f"Downloading single track - using automatic track title in folder '{folder_name}'")
     
     command = build_base_command(url, browser_cookies)
     command.extend([
@@ -196,7 +210,10 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         "--extract-audio",
         "--audio-format", "mp3",
         "--audio-quality", "0",
-        "--sponsorblock-remove", "all",
+        "--ignore-errors",  # Continue on errors
+        "--continue",  # Resume partial downloads
+        "--no-warnings",  # Reduce warning messages
+        "--progress",  # Show clean progress bar
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -290,22 +307,42 @@ def main():
     
     if len(sys.argv) > 1:
         url = sys.argv[1]
-        print("What would you like to do?")
+        print("What would you like to do?\n")
         print("1. Watch video (stream)")
-        print("2. Download")
-        action = input("Enter your choice (1 or 2): ").strip()
+        print("2. Download video")
+        print("3. Download music\n")
+        action = input("Enter your choice (1, 2, or 3): ").strip()
+        print("")
         
         if action == "1":
             watch_video(url, browser_cookies)
         elif action == "2":
-            download_video(url, browser_cookies)
+            # Video download options
+            print("For video downloads, choose an option:\n")
+            print("1. Video with audio")
+            print("2. Video only (no audio)")
+            print("3. Audio only (extracted from video)\n")
+            opt = input("Enter your choice (1, 2, or 3): ").strip()
+            print("")
+            if opt == "1":
+                download_video(url, browser_cookies)
+            elif opt == "2":
+                download_video_no_audio(url, browser_cookies)
+            elif opt == "3":
+                download_audio_from_video(url, browser_cookies)
+            else:
+                print("Invalid option. Exiting.")
+        elif action == "3":
+            # Music download - automatically handles playlist detection
+            download_audio(url, browser_cookies)
         else:
             print("Invalid choice. Exiting.")
     else:
-        print("Select download type:")
+        print("Select download type:\n")
         print("1. Video")
-        print("2. Music")
+        print("2. Music\n")
         choice = input("Enter your choice (1 or 2): ").strip()
+        print("")
         if choice not in ("1", "2"):
             print("Invalid choice. Exiting.")
             return
@@ -318,11 +355,12 @@ def main():
         if choice == "2":
             download_audio(url, browser_cookies)
         else:
-            print("For video downloads, choose an option:")
+            print("For video downloads, choose an option:\n")
             print("1. Video with audio")
             print("2. Video only (no audio)")
-            print("3. Audio only (extracted from video)")
+            print("3. Audio only (extracted from video)\n")
             opt = input("Enter your choice (1, 2, or 3): ").strip()
+            print("")
             if opt == "1":
                 download_video(url, browser_cookies)
             elif opt == "2":
