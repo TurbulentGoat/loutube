@@ -122,6 +122,8 @@ This allows access to videos that require login or are region-restricted.
 This script is provided as-is for personal use. Respect YouTube's Terms of Service and copyright laws when using this tool.
 
 ## Support
-If you would like to help me out, I have a stripe account set up which can securely accept payments,[here](https://buy.stripe.com/14A5kDgJ87vFh2I2nQ5J607).
-Or, if you'd rather, you can scan this QR code:
-<img width="880" height="1055" alt="image" src="https://github.com/user-attachments/assets/72b7d81a-9db0-4d44-825a-db98b7100dcb" />
+If you would like to help me out, I have a stripe account set up which can securely accept payments,[here ](https://buy.stripe.com/14A5kDgJ87vFh2I2nQ5J607).  
+  
+Or, if you'd rather, you can scan this QR code:  
+  
+<img width="25%" alt="image" src="https://github.com/user-attachments/assets/72b7d81a-9db0-4d44-825a-db98b7100dcb" />
