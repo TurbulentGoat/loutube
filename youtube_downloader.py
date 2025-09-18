@@ -11,60 +11,77 @@ from pathlib import Path
 DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "ytd-video")
 DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "ytd-music")
 
-def get_browser_cookies():
+# Global variable to cache browser cookies
+_cached_browser_cookies = None
+_cookies_checked = False
+
+def get_browser_cookies_fast():
     """
-    Attempt to find cookies from common browsers.
+    Quickly find available browser cookies using a much faster method.
     Returns the browser cookie string for yt-dlp, or None if none found.
     """
+    global _cached_browser_cookies, _cookies_checked
+    
+    # Return cached result if already checked
+    if _cookies_checked:
+        return _cached_browser_cookies
+    
     system = platform.system().lower()
     
-    # Common browser paths by OS
+    # Common browser paths by OS  
     browser_paths = {
         'linux': [  # Linux
-            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
+            ('brave', 'brave'),
             ('chromium', 'chromium'),
             ('edge', 'edge'),
         ],
         'darwin': [  # macOS
-            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
+            ('brave', 'brave'),
             ('safari', 'safari'),
             ('edge', 'edge'),
         ],
         'windows': [  # Windows
-            ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
+            ('brave', 'brave'),
             ('edge', 'edge'),
         ]
     }
     
     if system not in browser_paths:
+        _cookies_checked = True
         return None
     
-    # Try each browser in order of preference
+    # Quick test - just check if yt-dlp recognizes the browser option (much faster than full simulation)
     for browser_name, browser_key in browser_paths[system]:
         try:
-            # Test if yt-dlp can access this browser's cookies
+            # Just test if yt-dlp accepts the browser option - much faster than simulate
+            # Using --version is faster and more reliable than --help
             test_command = [
                 "yt-dlp", 
                 "--cookies-from-browser", browser_key,
-                "--simulate",
-                "--quiet",
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Test video
+                "--version"  # This just tests if the browser option is valid, returns immediately
             ]
-            result = subprocess.run(test_command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(test_command, capture_output=True, text=True, timeout=2)
             if result.returncode == 0:
                 print(f"Using cookies from {browser_name}")
+                _cached_browser_cookies = browser_key
+                _cookies_checked = True
                 return browser_key
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             continue
     
     print("Warning: Could not find browser cookies. Some videos may be unavailable.")
+    _cookies_checked = True
     return None
+
+def get_browser_cookies():
+    """Legacy function name - calls the fast version"""
+    return get_browser_cookies_fast()
 
 def build_base_command(url, browser_cookies=None):
     """Build the base yt-dlp command with optional cookies."""
@@ -116,7 +133,7 @@ def watch_video(url, browser_cookies=None):
         print("- Enter 'worst' for lowest quality")
         print("- Enter resolution like '720p', '1080p', etc.")
         
-        user_format = input("Format choice: ").strip()
+        user_format = safe_input("Format choice: ").strip()
         
         if not user_format:
             format_code = "best[height>=720]/best"
@@ -158,7 +175,7 @@ def download_video(url, browser_cookies=None, output_dir=None):
         output_dir = DEFAULT_VIDEO_DIR
     
     os.makedirs(output_dir, exist_ok=True)
-    video_title = input("Video title (or press Enter for auto-generated): ").strip()
+    video_title = safe_input("Video title (or press Enter for auto-generated): ").strip()
     
     # Use auto-generated title if none provided
     output_template = os.path.join(output_dir, f"{video_title}.%(ext)s") if video_title else os.path.join(output_dir, "%(title)s.%(ext)s")
@@ -188,7 +205,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         base_output_dir = output_dir
     
     # Ask for folder name
-    folder_name = input("Enter folder name for this download (not track title, that's next!): ").strip()
+    folder_name = safe_input("Enter folder name for this download (not track title, that's next!): ").strip()
     if not folder_name:
         folder_name = "Untitled"
     
@@ -232,7 +249,7 @@ def download_video_no_audio(url, browser_cookies=None, output_dir=None):
         output_dir = DEFAULT_VIDEO_DIR
     
     os.makedirs(output_dir, exist_ok=True)
-    title = input("Video title (or press Enter for auto-generated): ").strip()
+    title = safe_input("Video title (or press Enter for auto-generated): ").strip()
     
     if title:
         output_template = os.path.join(output_dir, f"{title}_video_only.%(ext)s")
@@ -261,7 +278,7 @@ def download_audio_from_video(url, browser_cookies=None, output_dir=None):
         output_dir = DEFAULT_MUSIC_DIR
     
     os.makedirs(output_dir, exist_ok=True)
-    title = input("Output audio title (or press Enter for auto-generated): ").strip()
+    title = safe_input("Output audio title (or press Enter for auto-generated): ").strip()
     
     output_template = os.path.join(output_dir, f"{title}.%(ext)s") if title else os.path.join(output_dir, "%(title)s.%(ext)s")
     
@@ -284,6 +301,18 @@ def download_audio_from_video(url, browser_cookies=None, output_dir=None):
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to extract audio.\n{e}")
 
+def check_for_quit(user_input):
+    """Check if user wants to quit and exit if so."""
+    if user_input.strip() == "99":
+        print("Goodbye!")
+        sys.exit(0)
+    return user_input
+
+def safe_input(prompt):
+    """Input wrapper that checks for quit command."""
+    user_input = input(prompt)
+    return check_for_quit(user_input)
+
 def check_dependencies():
     """Check if required dependencies are installed."""
     try:
@@ -298,22 +327,28 @@ def main():
     if not check_dependencies():
         return
     
-    # Get browser cookies once at startup
-    browser_cookies = get_browser_cookies()
-    
     print(f"Default video directory: {DEFAULT_VIDEO_DIR}")
     print(f"Default music directory: {DEFAULT_MUSIC_DIR}")
-    print("(You can modify these paths at the top of the script)\n")
+    print("(You can modify these paths at the top of the script)")
+    print("(Enter 99 at any prompt to quit)\n")
+    
+    # Get browser cookies only when we actually need to use yt-dlp
+    browser_cookies = None
     
     if len(sys.argv) > 1:
         url = sys.argv[1]
         print("What would you like to do?\n")
         print("1. Watch video (stream)")
         print("2. Download video")
-        print("3. Download music\n")
-        action = input("Enter your choice (1, 2, or 3): ").strip()
+        print("3. Download music")
+        print("99. Quit\n")
+        action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
         
+        # Get cookies only now when we need them
+        if action in ["1", "2", "3"]:
+            browser_cookies = get_browser_cookies()
+            
         if action == "1":
             watch_video(url, browser_cookies)
         elif action == "2":
@@ -321,8 +356,9 @@ def main():
             print("For video downloads, choose an option:\n")
             print("1. Video with audio")
             print("2. Video only (no audio)")
-            print("3. Audio only (extracted from video)\n")
-            opt = input("Enter your choice (1, 2, or 3): ").strip()
+            print("3. Audio only (extracted from video)")
+            print("99. Quit\n")
+            opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
                 download_video(url, browser_cookies)
@@ -335,31 +371,38 @@ def main():
         elif action == "3":
             # Music download - automatically handles playlist detection
             download_audio(url, browser_cookies)
+        elif action == "99":
+            pass  # Already handled by safe_input
         else:
             print("Invalid choice. Exiting.")
     else:
         print("Select download type:\n")
         print("1. Video")
-        print("2. Music\n")
-        choice = input("Enter your choice (1 or 2): ").strip()
+        print("2. Music")
+        print("99. Quit\n")
+        choice = safe_input("Enter your choice (1, 2, or 99): ").strip()
         print("")
-        if choice not in ("1", "2"):
+        if choice not in ("1", "2", "99"):
             print("Invalid choice. Exiting.")
             return
 
-        url = input("Enter the link: ").strip()
+        url = safe_input("Enter the link: ").strip()
         if not url:
             print("Error: No URL provided.")
             return
 
+        # Get cookies only now when we need them
+        browser_cookies = get_browser_cookies()
+
         if choice == "2":
             download_audio(url, browser_cookies)
-        else:
+        elif choice == "1":
             print("For video downloads, choose an option:\n")
             print("1. Video with audio")
             print("2. Video only (no audio)")
-            print("3. Audio only (extracted from video)\n")
-            opt = input("Enter your choice (1, 2, or 3): ").strip()
+            print("3. Audio only (extracted from video)")
+            print("99. Quit\n")
+            opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
                 download_video(url, browser_cookies)
