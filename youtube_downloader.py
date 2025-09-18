@@ -20,7 +20,7 @@ def get_browser_cookies():
     
     # Common browser paths by OS
     browser_paths = {
-        'linux': [
+        'linux': [  # Linux
             ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
@@ -34,7 +34,7 @@ def get_browser_cookies():
             ('safari', 'safari'),
             ('edge', 'edge'),
         ],
-        'windows': [
+        'windows': [  # Windows
             ('brave', 'brave'),
             ('firefox', 'firefox'),
             ('chrome', 'chrome'),
