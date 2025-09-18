@@ -8,8 +8,8 @@ import platform
 from pathlib import Path
 
 # Configuration - Users can modify these paths
-DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "yt-downloader-video")
-DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "yt-downloader-music")
+DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "ytd-video")
+DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "ytd-music")
 
 def get_browser_cookies():
     """
