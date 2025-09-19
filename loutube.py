@@ -291,6 +291,7 @@ def watch_video(url, browser_cookies=None):
         
         print("\nEnter format selection:")
         print("- Enter a specific format ID (e.g., '137+140' for video+audio from the ID column)")        
+        print("- Press enter to select the highest quality video & audio.")
         user_format = safe_input("\nFormat choice: ").strip()
         
         if not user_format:
@@ -600,13 +601,13 @@ def main():
     # Show configuration info
     config_file = find_config_file()
     if config_file:
-        print(f"✓ Using configuration: {config_file}")
+        print(f"Using configuration: {config_file}")
     else:
-        print("! No configuration file found - using built-in defaults")
+        print("No configuration file found - using built-in defaults")
     
-    print(f"📁 Video directory: {DEFAULT_VIDEO_DIR}")
-    print(f"🎵 Music directory: {DEFAULT_MUSIC_DIR}")
-    print("💡 Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
+    print(f"Video directory: {DEFAULT_VIDEO_DIR}")
+    print(f"Music directory: {DEFAULT_MUSIC_DIR}")
+    print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
     
     # Get browser cookies only when we actually need to use yt-dlp
     browser_cookies = None
