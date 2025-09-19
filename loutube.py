@@ -40,7 +40,7 @@ def display_logo():
                 "-C", 
                 "-m", "+* #%@", 
                 logo_path, 
-                "-W", "125", 
+                "-f",
                 "--complex"
             ]
             
