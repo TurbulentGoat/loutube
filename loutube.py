@@ -5,6 +5,8 @@ import subprocess
 import urllib.parse
 import sys
 import platform
+import signal
+import time
 from pathlib import Path
 
 # Configuration - Users can modify these paths
@@ -277,6 +279,39 @@ def filter_format_columns(line):
     except (IndexError, ValueError):
         return line  # Return original line if parsing fails
 
+def check_vlc_compatibility():
+    """Check if VLC is properly configured for streaming."""
+    try:
+        # Test VLC availability and get version info
+        result = subprocess.run(
+            ["vlc", "--version"], 
+            capture_output=True, 
+            text=True, 
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            # Check if we can run VLC in dummy interface mode
+            test_result = subprocess.run(
+                ["vlc", "--intf", "dummy", "--help"], 
+                capture_output=True, 
+                timeout=5
+            )
+            
+            if test_result.returncode == 0:
+                return True, "VLC is properly configured for streaming"
+            else:
+                return False, "VLC dummy interface not available"
+        else:
+            return False, "VLC not responding properly"
+            
+    except subprocess.TimeoutExpired:
+        return False, "VLC response timeout"
+    except FileNotFoundError:
+        return False, "VLC not found - please install VLC media player"
+    except Exception as e:
+        return False, f"VLC check failed: {str(e)}"
+
 def watch_video(url, browser_cookies=None):
     """Stream video at selected quality using VLC."""
     print("Fetching available formats...")
@@ -308,25 +343,119 @@ def watch_video(url, browser_cookies=None):
         url
     ])
     
-    vlc_command = ["vlc", "--play-and-exit", "-"]
+    # Enhanced VLC command with crash prevention options
+    vlc_command = [
+        "vlc", 
+        "--play-and-exit",           # Exit when playback ends
+        "--intf", "dummy",           # Use dummy interface (more stable)
+        "--no-osd",                  # Disable on-screen display
+        "--no-stats",                # Disable statistics
+        "--no-interact",             # Non-interactive mode
+        "--quiet",                   # Reduce verbose output
+        "--network-caching", "3000", # Increase network cache (3 seconds)
+        "--file-caching", "1000",    # File cache (1 second)
+        "--sout-mux-caching", "1000", # Mux cache
+        "--no-video-title-show",     # Don't show video title
+        "--no-snapshot-preview",     # Disable snapshot preview
+        "--no-plugins-scan",         # Skip plugin scanning
+        "--no-inhibit",              # Don't inhibit screensaver
+        "--no-xlib",                 # Disable xlib (can cause crashes)
+        "-"                          # Read from stdin
+    ]
+    
+    yt_process = None
+    vlc_process = None
+    
+    # Signal handler for clean shutdown
+    def signal_handler(signum, frame):
+        print(f"\nReceived signal {signum}, cleaning up...")
+        if yt_process and yt_process.poll() is None:
+            yt_process.terminate()
+        if vlc_process and vlc_process.poll() is None:
+            vlc_process.terminate()
+        sys.exit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     try:
         print(f"Streaming video with format '{format_code}' from: {url}")
-        # Check if VLC is available
-        subprocess.run(["vlc", "--version"], capture_output=True, check=True)
         
-        # Pipe yt-dlp output directly to VLC
-        yt_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        vlc_process = subprocess.Popen(vlc_command, stdin=yt_process.stdout, stderr=subprocess.PIPE)
+        # Check VLC compatibility
+        vlc_ok, vlc_message = check_vlc_compatibility()
+        if not vlc_ok:
+            print(f"VLC Error: {vlc_message}")
+            return
+        
+        print("Starting video stream... (Press Ctrl+C to stop)")
+        
+        # Start yt-dlp process
+        yt_process = subprocess.Popen(
+            command, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            bufsize=0  # Unbuffered
+        )
+        
+        # Start VLC process
+        vlc_process = subprocess.Popen(
+            vlc_command, 
+            stdin=yt_process.stdout, 
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        # Close our copy of the pipe
         yt_process.stdout.close()
-        vlc_process.communicate()
-        print("Streaming complete!")
+        
+        # Wait for VLC to complete (with timeout protection)
+        try:
+            vlc_stdout, vlc_stderr = vlc_process.communicate(timeout=7200)  # 2 hour timeout
+            
+            # Check exit codes
+            if vlc_process.returncode == 0:
+                print("Streaming completed successfully!")
+            elif vlc_process.returncode == 1:
+                print("Streaming ended (user closed VLC or stream ended)")
+            else:
+                print(f"VLC exited with code {vlc_process.returncode}")
+                if vlc_stderr:
+                    print(f"VLC error output: {vlc_stderr.decode('utf-8', errors='ignore')}")
+                    
+        except subprocess.TimeoutExpired:
+            print("Stream timeout reached, stopping...")
+            vlc_process.terminate()
+            try:
+                vlc_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                vlc_process.kill()
+                
     except FileNotFoundError:
         print("Error: VLC media player not found. Please install VLC to use streaming feature.")
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to stream video.\n{e}")
+        print(f"Error: Failed to start streaming.\n{e}")
     except KeyboardInterrupt:
         print("\nStreaming interrupted by user.")
+    except Exception as e:
+        print(f"Unexpected error during streaming: {e}")
+    finally:
+        # Ensure processes are properly cleaned up
+        if yt_process and yt_process.poll() is None:
+            print("Cleaning up yt-dlp process...")
+            yt_process.terminate()
+            try:
+                yt_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                yt_process.kill()
+                
+        if vlc_process and vlc_process.poll() is None:
+            print("Cleaning up VLC process...")
+            vlc_process.terminate()
+            try:
+                vlc_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                vlc_process.kill()
 
 def download_video(url, browser_cookies=None, output_dir=None):
     """Download video with audio using high-quality defaults."""
