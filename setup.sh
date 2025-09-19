@@ -169,9 +169,9 @@ if ! command -v vlc &> /dev/null; then
     echo
 fi
 
-# Check for jp2a (for animated ASCII logo)
+# Check for jp2a (for ASCII logo)
 if ! command -v jp2a &> /dev/null; then
-    print_status "jp2a not found. Installing for animated ASCII logo display..."
+    print_status "jp2a not found. Installing for ASCII logo display..."
     
     # Try to install jp2a based on the system
     if command -v apt &> /dev/null; then
@@ -211,66 +211,17 @@ if ! command -v jp2a &> /dev/null; then
         echo "  CentOS/RHEL:   sudo yum install jp2a"
         echo "  Arch Linux:    sudo pacman -S jp2a"
         echo "  macOS:         brew install jp2a"
-        echo "Logo will use fallback ASCII art display."
+        echo "Logo will use fallback display."
         echo
     fi
 else
-    print_success "jp2a found - animated ASCII logo will work"
-fi
-
-# Check for pv (for animated effect with jp2a)
-if ! command -v pv &> /dev/null; then
-    print_status "pv not found. Installing for animated ASCII logo effect..."
-    
-    # Try to install pv based on the system
-    if command -v apt &> /dev/null; then
-        if sudo apt install -y pv; then
-            print_success "pv installed successfully via apt"
-        else
-            print_warning "Failed to install pv via apt. Logo animation may not work."
-        fi
-    elif command -v yum &> /dev/null; then
-        if sudo yum install -y pv; then
-            print_success "pv installed successfully via yum"
-        else
-            print_warning "Failed to install pv via yum. Logo animation may not work."
-        fi
-    elif command -v dnf &> /dev/null; then
-        if sudo dnf install -y pv; then
-            print_success "pv installed successfully via dnf"
-        else
-            print_warning "Failed to install pv via dnf. Logo animation may not work."
-        fi
-    elif command -v pacman &> /dev/null; then
-        if sudo pacman -S --noconfirm pv; then
-            print_success "pv installed successfully via pacman"
-        else
-            print_warning "Failed to install pv via pacman. Logo animation may not work."
-        fi
-    elif command -v brew &> /dev/null; then
-        if brew install pv; then
-            print_success "pv installed successfully via brew"
-        else
-            print_warning "Failed to install pv via brew. Logo animation may not work."
-        fi
-    else
-        print_warning "pv not found and no supported package manager detected."
-        echo "To install pv manually:"
-        echo "  Ubuntu/Debian: sudo apt install pv"
-        echo "  CentOS/RHEL:   sudo yum install pv"
-        echo "  Arch Linux:    sudo pacman -S pv"
-        echo "  macOS:         brew install pv"
-        echo "Logo will display without animation."
-        echo
-    fi
-else
-    print_success "pv found - animated ASCII logo effect will work"
+    print_success "jp2a found - ASCII logo will work"
 fi
 
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
-cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/ytdl"
-chmod +x "$INSTALL_DIR/ytdl"
+cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/loutube"
+chmod +x "$INSTALL_DIR/loutube"
 
 # Copy configuration file
 print_status "Installing configuration file..."
@@ -287,8 +238,8 @@ fi
 print_success "Installation complete!"
 echo
 print_status "Usage:"
-echo "  ytdl                           - Interactive mode"
-echo "  ytdl 'https://youtube.com/...' - Direct URL"
+echo "  loutube                           - Interactive mode"
+echo "  loutube 'https://youtube.com/...' - Direct URL"
 echo
 print_status "Configuration:"
 echo "  Config file: $CONFIG_DIR/yt-dlp/config"
@@ -303,4 +254,4 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo "  source ~/.bashrc"
 fi
 
-print_success "Setup complete! Try running: ytdl"
+print_success "Setup complete! Try running: loutube"

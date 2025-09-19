@@ -34,8 +34,8 @@ def display_logo():
                 break
         
         if logo_path:
-            # Use jp2a command with pv for animated effect
-            command = f"jp2a --colors --chars=youtube --height=19 --term-fit '{logo_path}' --color-depth=4 | pv -qL 15000"
+            # Use jp2a command for ASCII logo display
+            command = f"jp2a --colors --chars=' youtube' --height=19 --term-fit '{logo_path}' --color-depth=4"
             
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
@@ -468,12 +468,12 @@ def download_video(url, browser_cookies=None, output_dir=None):
         print(f"Output directory: {output_dir}")
         print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"✅ Video download complete!")
-        print(f"📁 Files saved in: {output_dir}")
-        print(f"💡 To open folder: nautilus '{output_dir}' &")
+        print(f"Video download complete!")
+        print(f"Files saved in: {output_dir}")
+        print(f"To open folder: nautilus '{output_dir}' &")
         print("Note: Video includes chapters, subtitles, and metadata if available.")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error: Failed to download video.\n{e}")
+        print(f"Error: Failed to download video.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
 def download_audio(url, browser_cookies=None, output_dir=None):
@@ -513,12 +513,12 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         print(f"Output directory: {output_dir}")
         print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"✅ Audio download complete!")
-        print(f"📁 Files saved in: {output_dir}")
-        print(f"💡 To open folder: nautilus '{output_dir}' &")
+        print(f"Audio download complete!")
+        print(f"Files saved in: {output_dir}")
+        print(f"To open folder: nautilus '{output_dir}' &")
         print("Note: Audio includes metadata, thumbnails, and chapter information if available.")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error: Failed to download audio.\n{e}")
+        print(f"Error: Failed to download audio.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
 def download_video_no_audio(url, browser_cookies=None, output_dir=None):
@@ -703,7 +703,7 @@ def show_config():
     config_file = find_config_file()
     if config_file:
         print(f"Config file: {config_file}")
-        print("Config status: ✓ Found")
+        print("Config status: Found")
         
         # Show some key settings from config
         try:
@@ -738,23 +738,23 @@ def show_config():
     print(f"\nDependency status:")
     try:
         result = subprocess.run(["yt-dlp", "--version"], capture_output=True, text=True, check=True)
-        print(f"  yt-dlp: ✓ {result.stdout.strip()}")
+        print(f"  yt-dlp: {result.stdout.strip()}")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"  yt-dlp: ✗ Not found or not working")
+        print(f"  yt-dlp: Not found or not working")
     
     try:
         subprocess.run(["vlc", "--version"], capture_output=True, check=True)
-        print(f"  VLC: ✓ Available (streaming works)")
+        print(f"  VLC: Available (streaming works)")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"  VLC: ⚠ Not found (streaming unavailable)")
+        print(f"  VLC: Not found (streaming unavailable)")
     
     # Browser cookie status
     print(f"\nBrowser cookie detection:")
     browser_cookies = get_browser_cookies_fast()
     if browser_cookies:
-        print(f"  Status: ✓ Using cookies from browser")
+        print(f"  Status: Using cookies from browser")
     else:
-        print(f"  Status: ⚠ No browser cookies found")
+        print(f"  Status: No browser cookies found")
     
     print(f"\nFor help: python3 {os.path.basename(__file__)} --help")
 
