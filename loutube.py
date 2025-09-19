@@ -280,28 +280,18 @@ def filter_format_columns(line):
         return line  # Return original line if parsing fails
 
 def check_vlc_compatibility():
-    """Check if VLC is properly configured for streaming."""
+    """Check if VLC is available for streaming."""
     try:
-        # Test VLC availability and get version info
+        # Simple VLC availability check
         result = subprocess.run(
             ["vlc", "--version"], 
             capture_output=True, 
             text=True, 
-            timeout=10
+            timeout=5
         )
         
         if result.returncode == 0:
-            # Check if we can run VLC in dummy interface mode
-            test_result = subprocess.run(
-                ["vlc", "--intf", "dummy", "--help"], 
-                capture_output=True, 
-                timeout=5
-            )
-            
-            if test_result.returncode == 0:
-                return True, "VLC is properly configured for streaming"
-            else:
-                return False, "VLC dummy interface not available"
+            return True, "VLC is available for streaming"
         else:
             return False, "VLC not responding properly"
             
@@ -343,23 +333,11 @@ def watch_video(url, browser_cookies=None):
         url
     ])
     
-    # Enhanced VLC command with crash prevention options
+    # Simplified VLC command - more reliable
     vlc_command = [
         "vlc", 
-        "--play-and-exit",           # Exit when playback ends
-        "--intf", "dummy",           # Use dummy interface (more stable)
-        "--no-osd",                  # Disable on-screen display
-        "--no-stats",                # Disable statistics
-        "--no-interact",             # Non-interactive mode
-        "--quiet",                   # Reduce verbose output
-        "--network-caching", "3000", # Increase network cache (3 seconds)
-        "--file-caching", "1000",    # File cache (1 second)
-        "--sout-mux-caching", "1000", # Mux cache
-        "--no-video-title-show",     # Don't show video title
-        "--no-snapshot-preview",     # Disable snapshot preview
-        "--no-plugins-scan",         # Skip plugin scanning
-        "--no-inhibit",              # Don't inhibit screensaver
-        "--no-xlib",                 # Disable xlib (can cause crashes)
+        "--play-and-exit",           # Exit when playbook ends
+        "--network-caching", "3000", # 3 second cache for better buffering
         "-"                          # Read from stdin
     ]
     
@@ -389,6 +367,7 @@ def watch_video(url, browser_cookies=None):
             return
         
         print("Starting video stream... (Press Ctrl+C to stop)")
+        print("Note: VLC will open in a separate window")
         
         # Start yt-dlp process
         yt_process = subprocess.Popen(
@@ -398,16 +377,29 @@ def watch_video(url, browser_cookies=None):
             bufsize=0  # Unbuffered
         )
         
+        # Give yt-dlp a moment to start
+        time.sleep(1)
+        
+        # Check if yt-dlp started successfully
+        if yt_process.poll() is not None:
+            stderr_output = yt_process.stderr.read().decode('utf-8', errors='ignore')
+            print(f"yt-dlp failed to start: {stderr_output}")
+            return
+        
+        print("yt-dlp started, launching VLC...")
+        
         # Start VLC process
         vlc_process = subprocess.Popen(
             vlc_command, 
             stdin=yt_process.stdout, 
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdout=subprocess.DEVNULL,  # Suppress VLC output
+            stderr=subprocess.DEVNULL   # Suppress VLC errors
         )
         
         # Close our copy of the pipe
         yt_process.stdout.close()
+        
+        print("VLC launched! The video should start playing shortly.")
         
         # Wait for VLC to complete (with timeout protection)
         try:
@@ -480,11 +472,16 @@ def download_video(url, browser_cookies=None, output_dir=None):
 
     try:
         print(f"Downloading high-quality video from: {url}")
+        print(f"Output directory: {output_dir}")
+        print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"Video download complete! Files saved in '{output_dir}'.")
+        print(f"✅ Video download complete!")
+        print(f"📁 Files saved in: {output_dir}")
+        print(f"💡 To open folder: nautilus '{output_dir}' &")
         print("Note: Video includes chapters, subtitles, and metadata if available.")
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to download video.\n{e}")
+        print(f"❌ Error: Failed to download video.\n{e}")
+        print(f"Command that failed: {' '.join(command)}")
 
 def download_audio(url, browser_cookies=None, output_dir=None):
     """Download best audio only with high quality settings."""
@@ -520,11 +517,16 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     
     try:
         print(f"Downloading high-quality audio from: {url}")
+        print(f"Output directory: {output_dir}")
+        print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"Audio download complete! Files saved in '{output_dir}'.")
+        print(f"✅ Audio download complete!")
+        print(f"📁 Files saved in: {output_dir}")
+        print(f"💡 To open folder: nautilus '{output_dir}' &")
         print("Note: Audio includes metadata, thumbnails, and chapter information if available.")
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to download audio.\n{e}")
+        print(f"❌ Error: Failed to download audio.\n{e}")
+        print(f"Command that failed: {' '.join(command)}")
 
 def download_video_no_audio(url, browser_cookies=None, output_dir=None):
     """Download video only, no audio track."""
@@ -616,6 +618,7 @@ BASIC USAGE:
   ytdl "https://youtube.com/watch?v=..."  Direct download
   ytdl --help                            Show this help
   ytdl --config                          Show current configuration
+  ytdl --recent                          Show recent downloads
 
 FEATURES:
   • High-quality video downloads (up to 1080p) with H.264+AAC
@@ -642,6 +645,58 @@ TIPS:
 For more information, visit: https://github.com/TurbulentGoat/youtube-downloader
 """.format(DEFAULT_VIDEO_DIR=DEFAULT_VIDEO_DIR, DEFAULT_MUSIC_DIR=DEFAULT_MUSIC_DIR)
     print(help_text)
+
+def show_recent_downloads():
+    """Show recently downloaded files."""
+    print("=== Recent Downloads ===\n")
+    
+    # Check both video and music directories
+    directories = {
+        "Videos": DEFAULT_VIDEO_DIR,
+        "Music": DEFAULT_MUSIC_DIR
+    }
+    
+    for dir_type, dir_path in directories.items():
+        if os.path.exists(dir_path):
+            print(f"{dir_type} directory: {dir_path}")
+            try:
+                # Get files sorted by modification time (newest first)
+                files = []
+                for file in os.listdir(dir_path):
+                    file_path = os.path.join(dir_path, file)
+                    if os.path.isfile(file_path):
+                        stat = os.stat(file_path)
+                        files.append((file, stat.st_mtime, stat.st_size))
+                
+                files.sort(key=lambda x: x[1], reverse=True)  # Sort by modification time
+                
+                # Show last 5 files
+                recent_files = files[:5]
+                if recent_files:
+                    for file, mtime, size in recent_files:
+                        # Format file size
+                        if size > 1024*1024*1024:
+                            size_str = f"{size/(1024*1024*1024):.1f}GB"
+                        elif size > 1024*1024:
+                            size_str = f"{size/(1024*1024):.1f}MB"
+                        else:
+                            size_str = f"{size/1024:.1f}KB"
+                        
+                        # Format date
+                        date_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(mtime))
+                        print(f"  • {file} ({size_str}) - {date_str}")
+                    
+                    if len(files) > 5:
+                        print(f"  ... and {len(files) - 5} more files")
+                    
+                    print(f"💡 To open this folder: nautilus '{dir_path}' &")
+                else:
+                    print(f"  No files found in {dir_path}")
+            except Exception as e:
+                print(f"  Error reading directory: {e}")
+        else:
+            print(f"{dir_type} directory: {dir_path} (not created yet)")
+        print()
 
 def show_config():
     """Display current configuration information."""
@@ -718,6 +773,9 @@ def main():
             return
         elif sys.argv[1] in ['--config', '-c', 'config']:
             show_config()
+            return
+        elif sys.argv[1] in ['--recent', '-r', 'recent']:
+            show_recent_downloads()
             return
         
     if not check_dependencies():
