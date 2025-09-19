@@ -269,8 +269,8 @@ fi
 
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
-cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/ytdl"
-chmod +x "$INSTALL_DIR/ytdl"
+cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/loutube"
+chmod +x "$INSTALL_DIR/loutube"
 
 # Copy configuration file
 print_status "Installing configuration file..."
@@ -287,8 +287,7 @@ fi
 print_success "Installation complete!"
 echo
 print_status "Usage:"
-echo "  ytdl                           - Interactive mode"
-echo "  ytdl 'https://youtube.com/...' - Direct URL"
+echo "  loutube 'https://youtube.com/...' - Direct URL"
 echo
 print_status "Configuration:"
 echo "  Config file: $CONFIG_DIR/yt-dlp/config"
@@ -303,4 +302,4 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo "  source ~/.bashrc"
 fi
 
-print_success "Setup complete! Try running: ytdl"
+print_success "Setup complete! Try running: loutube"
