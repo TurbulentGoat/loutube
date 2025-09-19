@@ -171,7 +171,7 @@ fi
 
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
-cp "$SCRIPT_DIR/youtube_downloader.py" "$INSTALL_DIR/ytdl"
+cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/ytdl"
 chmod +x "$INSTALL_DIR/ytdl"
 
 # Copy configuration file
@@ -181,7 +181,9 @@ cp "$SCRIPT_DIR/yt-dlp.conf" "$CONFIG_DIR/yt-dlp/config"
 
 # Copy images if they exist
 if [[ -f "$SCRIPT_DIR/loutube.png" ]]; then
-    cp "$SCRIPT_DIR/loutube.png" "$INSTALL_DIR/"
+    # Copy to home directory for snap access compatibility (no dot prefix)
+    cp "$SCRIPT_DIR/loutube.png" "$HOME/ytdl-logo.png"
+    print_status "Logo image copied to $HOME/ytdl-logo.png"
 fi
 
 print_success "Installation complete!"
