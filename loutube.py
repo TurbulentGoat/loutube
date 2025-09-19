@@ -34,17 +34,10 @@ def display_logo():
                 break
         
         if logo_path:
-            # Use ascii-image-converter command exactly as provided
-            command = [
-                "ascii-image-converter", 
-                "-C", 
-                "-m", "+* #%@", 
-                logo_path, 
-                "-f",
-                "--complex"
-            ]
+            # Use jp2a command with pv for animated effect
+            command = f"jp2a --color --chars youtube '{logo_path}' -H 19 -f --color-depth 4 | pv -qL 15000"
             
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 print(result.stdout)
                 return

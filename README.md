@@ -18,7 +18,7 @@ A Python script for downloading and streaming YouTube videos using yt-dlp. Suppo
 
 ## Cookies are tricky! *1
 
-A note on cookies: I have put some basic searches in the script to find & use the cookies from your browser, but this will likely fail. If you want to download a video that is behind a login, such as a friend's video on Insta, follow the instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) to add the neccessary code.
+A note on cookies: I have put some basic searches in the script to find & use the cookies from your browser, but this will likely fail. If you want to download a video that is behind a login, such as a friend's video on Insta, follow the instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) to add the necessary code.
 
 ## Requirements
 
