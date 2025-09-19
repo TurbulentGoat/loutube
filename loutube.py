@@ -35,7 +35,7 @@ def display_logo():
         
         if logo_path:
             # Use jp2a command with pv for animated effect
-            command = f"jp2a --colors --chars=' youtube' --height=19 --term-fit '{logo_path}' --color-depth=4 | pv -qL 15000"
+            command = f"jp2a --colors --chars=' youtube' --height=19 --term-fit '{logo_path}' --color-depth=4 | pv -qL 5000"
             
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
