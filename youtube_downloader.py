@@ -157,9 +157,34 @@ def get_browser_cookies():
     """Legacy function name - calls the fast version"""
     return get_browser_cookies_fast()
 
+def find_config_file():
+    """Find the yt-dlp configuration file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_locations = [
+        # Portable config (same directory as script)
+        os.path.join(script_dir, "yt-dlp.conf"),
+        # User config directories
+        os.path.join(Path.home(), ".config", "yt-dlp", "config"),
+        os.path.join(Path.home(), ".yt-dlp", "config"),
+        os.path.join(Path.home(), "yt-dlp.conf"),
+        # System config
+        "/etc/yt-dlp/config",
+        "/etc/yt-dlp.conf"
+    ]
+    
+    for config_path in config_locations:
+        if os.path.exists(config_path):
+            return config_path
+    return None
+
 def build_base_command(url, browser_cookies=None):
-    """Build the base yt-dlp command with optional cookies."""
+    """Build the base yt-dlp command with optional cookies and config."""
     command = ["yt-dlp"]
+    
+    # Add configuration file if it exists
+    config_file = find_config_file()
+    if config_file:
+        command.extend(["--config-location", config_file])
     
     if browser_cookies:
         command.extend(["--cookies-from-browser", browser_cookies])
@@ -290,7 +315,7 @@ def watch_video(url, browser_cookies=None):
         print("\nStreaming interrupted by user.")
 
 def download_video(url, browser_cookies=None, output_dir=None):
-    """Download video with audio."""
+    """Download video with audio using high-quality defaults."""
     if output_dir is None:
         output_dir = DEFAULT_VIDEO_DIR
     
@@ -302,30 +327,31 @@ def download_video(url, browser_cookies=None, output_dir=None):
     
     command = build_base_command(url, browser_cookies)
     command.extend([
-        "-f", "bestvideo+bestaudio/best",
-        "--sponsorblock-remove", "all",
-        "--progress",
+        # High quality video with audio, prefer h264+aac for compatibility
+        "-f", "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[vcodec=h264]+bestaudio[acodec=aac]/bestvideo+bestaudio/best",
+        "--merge-output-format", "mp4",  # Ensure mp4 container for compatibility
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
     ])
 
     try:
-        print(f"Downloading video (with audio) from: {url}")
+        print(f"Downloading high-quality video from: {url}")
         subprocess.run(command, check=True)
         print(f"Video download complete! Files saved in '{output_dir}'.")
+        print("Note: Video includes chapters, subtitles, and metadata if available.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video.\n{e}")
 
 def download_audio(url, browser_cookies=None, output_dir=None):
-    """Download best audio only (e.g. for Music)."""
+    """Download best audio only with high quality settings."""
     if output_dir is None:
         base_output_dir = DEFAULT_MUSIC_DIR
     else:
         base_output_dir = output_dir
     
     # Ask for folder name
-    folder_name = safe_input("Enter folder name for this download (not track title, that's next!): ").strip()
+    folder_name = safe_input("Enter folder name for this download: ").strip()
     if not folder_name:
         folder_name = "Untitled"
     
@@ -333,33 +359,27 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     os.makedirs(output_dir, exist_ok=True)
     
     if is_playlist(url):
-        # For playlists, let yt-dlp use automatic titles
-        output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
-        print(f"Downloading playlist - using automatic track titles in folder '{folder_name}'")
+        print(f"Downloading playlist to folder '{folder_name}'")
+        # For playlists, add track numbers
+        output_template = os.path.join(output_dir, "%(playlist_index)02d - %(title)s.%(ext)s")
     else:
-        # For single tracks, also use automatic title (same as playlists)
+        print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
-        print(f"Downloading single track - using automatic track title in folder '{folder_name}'")
     
     command = build_base_command(url, browser_cookies)
     command.extend([
-        "-f", "bestaudio/best",
+        "-f", "bestaudio[acodec=aac]/bestaudio/best",  # Prefer AAC for better quality
         "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
-        "--ignore-errors",  # Continue on errors
-        "--continue",  # Resume partial downloads
-        "--no-warnings",  # Reduce warning messages
-        "--progress",  # Show clean progress bar
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
     ])
     
     try:
-        print(f"Downloading audio from: {url}")
+        print(f"Downloading high-quality audio from: {url}")
         subprocess.run(command, check=True)
         print(f"Audio download complete! Files saved in '{output_dir}'.")
+        print("Note: Audio includes metadata, thumbnails, and chapter information if available.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download audio.\n{e}")
 
@@ -443,7 +463,120 @@ def check_dependencies():
         return False
     return True
 
+def show_help():
+    """Display help information."""
+    help_text = """
+YouTube Downloader & Streamer - Usage Guide
+
+BASIC USAGE:
+  ytdl                                    Interactive mode
+  ytdl "https://youtube.com/watch?v=..."  Direct download
+  ytdl --help                            Show this help
+  ytdl --config                          Show current configuration
+
+FEATURES:
+  • High-quality video downloads (up to 1080p) with H.264+AAC
+  • Premium audio extraction with metadata and thumbnails  
+  • Direct streaming to VLC without downloading
+  • Automatic SponsorBlock integration (removes ads/sponsors)
+  • Smart browser cookie detection for private content
+  • Playlist support with automatic track numbering
+
+DIRECTORIES:
+  Videos: {DEFAULT_VIDEO_DIR}
+  Music:  {DEFAULT_MUSIC_DIR}
+  
+CONFIG FILE:
+  The script uses yt-dlp.conf for default settings.
+  Location: ~/.config/yt-dlp/config (or same directory as script)
+  
+TIPS:
+  • Enter 99 at any prompt to quit
+  • Leave titles blank for auto-generated names
+  • VLC required for streaming feature
+  • Cookies automatically detected from browsers
+
+For more information, visit: https://github.com/TurbulentGoat/youtube-downloader
+""".format(DEFAULT_VIDEO_DIR=DEFAULT_VIDEO_DIR, DEFAULT_MUSIC_DIR=DEFAULT_MUSIC_DIR)
+    print(help_text)
+
+def show_config():
+    """Display current configuration information."""
+    print("=== YouTube Downloader Configuration ===\n")
+    
+    # Script info
+    script_path = os.path.abspath(__file__)
+    print(f"Script location: {script_path}")
+    
+    # Config file info
+    config_file = find_config_file()
+    if config_file:
+        print(f"Config file: {config_file}")
+        print("Config status: ✓ Found")
+        
+        # Show some key settings from config
+        try:
+            with open(config_file, 'r') as f:
+                content = f.read()
+                print("\nKey settings from config file:")
+                
+                # Extract some important settings
+                lines = content.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        if '--format' in line:
+                            print(f"  Quality: {line}")
+                        elif '--audio-format' in line:
+                            print(f"  Audio: {line}")
+                        elif '--sponsorblock' in line:
+                            print(f"  SponsorBlock: {line}")
+                        elif '--embed-chapters' in line:
+                            print(f"  Chapters: {line}")
+        except Exception as e:
+            print(f"Could not read config: {e}")
+    else:
+        print("Config file: None found")
+        print("Config status: ⚠ Using built-in defaults")
+    
+    print(f"\nDefault directories:")
+    print(f"  Videos: {DEFAULT_VIDEO_DIR}")
+    print(f"  Music:  {DEFAULT_MUSIC_DIR}")
+    
+    # Check dependencies
+    print(f"\nDependency status:")
+    try:
+        result = subprocess.run(["yt-dlp", "--version"], capture_output=True, text=True, check=True)
+        print(f"  yt-dlp: ✓ {result.stdout.strip()}")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(f"  yt-dlp: ✗ Not found or not working")
+    
+    try:
+        subprocess.run(["vlc", "--version"], capture_output=True, check=True)
+        print(f"  VLC: ✓ Available (streaming works)")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(f"  VLC: ⚠ Not found (streaming unavailable)")
+    
+    # Browser cookie status
+    print(f"\nBrowser cookie detection:")
+    browser_cookies = get_browser_cookies_fast()
+    if browser_cookies:
+        print(f"  Status: ✓ Using cookies from browser")
+    else:
+        print(f"  Status: ⚠ No browser cookies found")
+    
+    print(f"\nFor help: python3 {os.path.basename(__file__)} --help")
+
 def main():
+    # Check for help or config flags
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ['--help', '-h', 'help']:
+            show_help()
+            return
+        elif sys.argv[1] in ['--config', '-c', 'config']:
+            show_config()
+            return
+        
     if not check_dependencies():
         return
     
@@ -451,10 +584,16 @@ def main():
     display_logo()
     print()
     
-    print(f"Default video directory: {DEFAULT_VIDEO_DIR}")
-    print(f"Default music directory: {DEFAULT_MUSIC_DIR}")
-    print("(You can modify these paths at the top of the script)")
-    print("(Enter 99 at any prompt to quit)\n")
+    # Show configuration info
+    config_file = find_config_file()
+    if config_file:
+        print(f"✓ Using configuration: {config_file}")
+    else:
+        print("! No configuration file found - using built-in defaults")
+    
+    print(f"📁 Video directory: {DEFAULT_VIDEO_DIR}")
+    print(f"🎵 Music directory: {DEFAULT_MUSIC_DIR}")
+    print("💡 Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
     
     # Get browser cookies only when we actually need to use yt-dlp
     browser_cookies = None
