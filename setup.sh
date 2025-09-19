@@ -169,9 +169,9 @@ if ! command -v vlc &> /dev/null; then
     echo
 fi
 
-# Check for jp2a (for animated ASCII logo)
+# Check for jp2a (for ASCII logo)
 if ! command -v jp2a &> /dev/null; then
-    print_status "jp2a not found. Installing for animated ASCII logo display..."
+    print_status "jp2a not found. Installing for ASCII logo display..."
     
     # Try to install jp2a based on the system
     if command -v apt &> /dev/null; then
@@ -211,11 +211,12 @@ if ! command -v jp2a &> /dev/null; then
         echo "  CentOS/RHEL:   sudo yum install jp2a"
         echo "  Arch Linux:    sudo pacman -S jp2a"
         echo "  macOS:         brew install jp2a"
-        echo "Logo will use fallback ASCII art display."
+        echo "Logo will use fallback display."
         echo
     fi
 else
-print_success "jp2a found - animated ASCII logo will work"
+    print_success "jp2a found - ASCII logo will work"
+fi
 
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
