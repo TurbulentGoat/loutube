@@ -34,17 +34,10 @@ def display_logo():
                 break
         
         if logo_path:
-            # Use ascii-image-converter command exactly as provided
-            command = [
-                "ascii-image-converter", 
-                "-C", 
-                "-m", "+* #%@", 
-                logo_path, 
-                "-W", "125",
-                "--complex"
-            ]
+            # Use jp2a command with pv for animated effect
+            command = f"jp2a --color --chars youtube '{logo_path}' -H 19 -f --color-depth 4 | pv -qL 15000"
             
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 print(result.stdout)
                 return
@@ -366,16 +359,10 @@ def watch_video(url, browser_cookies=None):
             print(f"VLC Error: {vlc_message}")
             return
         
-        # Special handling for Instagram URLs
-        is_instagram = 'instagram.com' in url.lower()
-        if is_instagram:
-            print(" Instagram stream detected - these may have limitations")
-            print("If streaming fails, try downloading instead")
-        
         print("Starting video stream... (Press Ctrl+C to stop)")
         print("Note: VLC will open in a separate window")
         
-        # Start yt-dlp process with better error handling
+        # Start yt-dlp process
         yt_process = subprocess.Popen(
             command, 
             stdout=subprocess.PIPE, 
@@ -383,54 +370,29 @@ def watch_video(url, browser_cookies=None):
             bufsize=0  # Unbuffered
         )
         
-        # Give yt-dlp more time to start, especially for Instagram
-        wait_time = 3 if is_instagram else 1
-        print(f"Waiting {wait_time} seconds for yt-dlp to initialize...")
-        time.sleep(wait_time)
+        # Give yt-dlp a moment to start
+        time.sleep(1)
         
         # Check if yt-dlp started successfully
         if yt_process.poll() is not None:
             stderr_output = yt_process.stderr.read().decode('utf-8', errors='ignore')
-            print(f"yt-dlp failed to start:")
-            print(f"Error: {stderr_output}")
-            
-            if is_instagram:
-                print("\nInstagram troubleshooting:")
-                print("- Instagram stories/videos often can't be streamed")
-                print("- Try downloading instead of streaming")
-                print("- Make sure you're logged into Instagram in your browser")
+            print(f"yt-dlp failed to start: {stderr_output}")
             return
         
         print("yt-dlp started, launching VLC...")
-        
-        # Test if yt-dlp is producing output before launching VLC
-        try:
-            # Try to read a small amount of data to verify the stream is working
-            import select
-            if select.select([yt_process.stdout], [], [], 5):  # Wait up to 5 seconds
-                print("Stream data detected from yt-dlp")
-            else:
-                print(" No stream data detected - this may cause VLC errors")
-                if is_instagram:
-                    print("Instagram streams often fail - consider downloading instead")
-        except ImportError:
-            # select not available on Windows, just proceed
-            pass
         
         # Start VLC process
         vlc_process = subprocess.Popen(
             vlc_command, 
             stdin=yt_process.stdout, 
             stdout=subprocess.DEVNULL,  # Suppress VLC output
-            stderr=subprocess.PIPE      # Capture VLC errors for debugging
+            stderr=subprocess.DEVNULL   # Suppress VLC errors
         )
         
         # Close our copy of the pipe
         yt_process.stdout.close()
         
         print("VLC launched! The video should start playing shortly.")
-        if is_instagram:
-            print("Instagram streams may take longer to start...")
         
         # Wait for VLC to complete (with timeout protection)
         try:
@@ -444,20 +406,7 @@ def watch_video(url, browser_cookies=None):
             else:
                 print(f"VLC exited with code {vlc_process.returncode}")
                 if vlc_stderr:
-                    error_output = vlc_stderr.decode('utf-8', errors='ignore')
-                    if 'fd://0' in error_output or "can't be opened" in error_output:
-                        print("VLC streaming error detected!")
-                        if is_instagram:
-                            print("Instagram streaming limitations:")
-                            print("   • Instagram stories/posts often can't be streamed directly")
-                            print("   • Try downloading instead: ytdl --download [url]")
-                            print("   • Some Instagram content requires authentication")
-                        else:
-                            print("Streaming failed. Try downloading instead:")
-                            print(f"   ytdl --download {url}")
-                        print(f"VLC error details: {error_output[:200]}...")
-                    else:
-                        print(f"VLC error output: {error_output}")
+                    print(f"VLC error output: {vlc_stderr.decode('utf-8', errors='ignore')}")
                     
         except subprocess.TimeoutExpired:
             print("Stream timeout reached, stopping...")
@@ -519,12 +468,12 @@ def download_video(url, browser_cookies=None, output_dir=None):
         print(f"Output directory: {output_dir}")
         print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"Video download complete!")
-        print(f"Files saved in: {output_dir}")
-        print(f"To open folder: nautilus '{output_dir}' &")
+        print(f"✅ Video download complete!")
+        print(f"📁 Files saved in: {output_dir}")
+        print(f"💡 To open folder: nautilus '{output_dir}' &")
         print("Note: Video includes chapters, subtitles, and metadata if available.")
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to download video.\n{e}")
+        print(f"❌ Error: Failed to download video.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
 def download_audio(url, browser_cookies=None, output_dir=None):
@@ -564,12 +513,12 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         print(f"Output directory: {output_dir}")
         print("Starting download...")
         subprocess.run(command, check=True)
-        print(f"Audio download complete!")
-        print(f"Files saved in: {output_dir}")
-        print(f"To open folder: nautilus '{output_dir}' &")
+        print(f"✅ Audio download complete!")
+        print(f"📁 Files saved in: {output_dir}")
+        print(f"💡 To open folder: nautilus '{output_dir}' &")
         print("Note: Audio includes metadata, thumbnails, and chapter information if available.")
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to download audio.\n{e}")
+        print(f"❌ Error: Failed to download audio.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
 def download_video_no_audio(url, browser_cookies=None, output_dir=None):
@@ -733,7 +682,7 @@ def show_recent_downloads():
                     if len(files) > 5:
                         print(f"  ... and {len(files) - 5} more files")
                     
-                    print(f"To open this folder: nautilus '{dir_path}' &")
+                    print(f"💡 To open this folder: nautilus '{dir_path}' &")
                 else:
                     print(f"  No files found in {dir_path}")
             except Exception as e:
