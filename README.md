@@ -23,53 +23,41 @@ A note on cookies: I have put some basic searches in the script to find & use th
 ## Requirements
 
 - Python 3.6 or higher
-- yt-dlp: `sudo apt install yt-dlp` (or whichever you use on your distro)
-- A media player (VLC recommended, or system default)
+- yt-dlp: Will install when you run setup.sh if it is not already installed.
+- A media player (VLC is recommended, or system default)
 
 ## Installation
 
-1. Install Python 3.6+ from [python.org](https://python.org)
-2. Install yt-dlp:
-   ```bash
-   sudo apt install yt-dlp
-   ```
-3. Download the script to a directory in your PATH (e.g., `/usr/local/bin/` on Unix systems)
-4. Make it executable and rename it for easy access:
-   ```bash
-   chmod +x /path/to/youtube_downloader.py
-   mv /path/to/youtube_downloader.py /usr/local/bin/download
-   ```
-5. (Optional) Install VLC for best streaming experience
-
+0.5. Install Python 3.6+ from [python.org](https://python.org)
+1. In terminal, go to whichever directory you want to install it.
+2. Run this to take care of the installation and file permissions:
+ ```
+  git clone https://github.com/TurbulentGoat/youtube-downloader.git && \
+  cd youtube-downloader && \
+  chmod +x setup.sh && \
+  ./setup.sh
+ ```
 Now you can use the script from anywhere by simply typing:
-```bash
-download "https://youtube.com/watch?v=..."
-```
-
-### Alternative Installation (if you don't have PATH access)
-
-If you can't modify system directories, you can create an alias in your shell:
-```bash
-# Add this to your ~/.bashrc, ~/.zshrc, or equivalent
-alias download='/full/path/to/youtube_downloader.py'
-```
+  ```bash
+  ytdl "https://youtube.com/watch?v=..."
+  ```
 
 ## Usage
 
 ### Quick Command (after installation)
 ```bash
-download "https://youtube.com/watch?v=..."
+ytdl "https://youtube.com/watch?v=..."
 ```
 
 ### Interactive Mode
 ```bash
-download
+ytdl
 ```
 Follow the prompts to select download type and enter URL.
 
 ### Traditional Python Mode
 ```bash
-python youtube_downloader.py "https://youtube.com/watch?v=..."
+python loutube.py "https://youtube.com/watch?v=..."
 ```
 
 ## Download Options
@@ -106,6 +94,11 @@ Default download locations:
 - Music: `~/Music/ytd-music`
 
 You can modify these paths by editing the variables at the top of the script.
+
+## Additional useful commands:  
+`ytdl --help      # Show detailed help`  
+`ytdl --recent    # Show recent downloads`  
+`ytdl --config    # Show current configuration`  
 
 ## Browser Support
 
