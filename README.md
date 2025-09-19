@@ -37,16 +37,16 @@ A note on cookies: I have put some basic searches in the script to find & use th
   chmod +x setup.sh && \
   ./setup.sh
  ```
-Now you can use the script from anywhere by simply typing:
+Now you can use the script from anywhere by simply typing, for example:
   ```bash
-  ytdl "https://youtube.com/watch?v=..."
+  ytdl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   ```
 
 ## Usage
 
 ### Quick Command (after installation)
 ```bash
-ytdl "https://youtube.com/watch?v=..."
+ytdl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 ### Interactive Mode
@@ -54,11 +54,6 @@ ytdl "https://youtube.com/watch?v=..."
 ytdl
 ```
 Follow the prompts to select download type and enter URL.
-
-### Traditional Python Mode
-```bash
-python loutube.py "https://youtube.com/watch?v=..."
-```
 
 ## Download Options
 
