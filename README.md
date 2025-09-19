@@ -23,7 +23,7 @@ A note on cookies: I have put some basic searches in the script to find & use th
 ## Requirements
 
 - Python 3.6 or higher
-- yt-dlp: `pip install yt-dlp`
+- yt-dlp: `sudo apt install yt-dlp` (or whichever you use on your distro)
 - A media player (VLC recommended, or system default)
 
 ## Installation
@@ -31,7 +31,7 @@ A note on cookies: I have put some basic searches in the script to find & use th
 1. Install Python 3.6+ from [python.org](https://python.org)
 2. Install yt-dlp:
    ```bash
-   pip install yt-dlp
+   sudo apt install yt-dlp
    ```
 3. Download the script to a directory in your PATH (e.g., `/usr/local/bin/` on Unix systems)
 4. Make it executable and rename it for easy access:
