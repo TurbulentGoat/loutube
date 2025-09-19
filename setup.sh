@@ -255,4 +255,3 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
 fi
 
 print_success "Setup complete! Try running: loutube"
-# TEST MARKER - If you see this comment, the update worked! $(date)
