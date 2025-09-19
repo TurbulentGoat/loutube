@@ -82,10 +82,80 @@ fi
 
 # Install yt-dlp
 print_status "Installing/updating yt-dlp..."
-if command -v pip3 &> /dev/null; then
-    pip3 install --upgrade yt-dlp
+
+# Try apt first (Debian/Ubuntu systems)
+if command -v apt &> /dev/null; then
+    print_status "Attempting to install yt-dlp via apt..."
+    if sudo apt update && sudo apt install -y yt-dlp; then
+        print_success "yt-dlp installed successfully via apt"
+    else
+        print_warning "apt installation failed, trying alternative methods..."
+        # Fall back to pipx if available
+        if command -v pipx &> /dev/null; then
+            print_status "Installing yt-dlp via pipx..."
+            pipx install yt-dlp
+        else
+            print_status "pipx not found. Installing pipx first..."
+            if sudo apt install -y pipx; then
+                pipx install yt-dlp
+            else
+                print_error "Could not install pipx. Please install yt-dlp manually:"
+                echo "  Option 1: sudo apt install yt-dlp"
+                echo "  Option 2: pipx install yt-dlp"
+                echo "  Option 3: pip install --user yt-dlp"
+                exit 1
+            fi
+        fi
+    fi
+# Try yum/dnf for Red Hat systems
+elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
+    PKG_MGR="yum"
+    if command -v dnf &> /dev/null; then
+        PKG_MGR="dnf"
+    fi
+    print_status "Attempting to install yt-dlp via $PKG_MGR..."
+    if sudo $PKG_MGR install -y yt-dlp; then
+        print_success "yt-dlp installed successfully via $PKG_MGR"
+    else
+        print_warning "$PKG_MGR installation failed, trying pipx..."
+        if command -v pipx &> /dev/null; then
+            pipx install yt-dlp
+        else
+            sudo $PKG_MGR install -y pipx && pipx install yt-dlp
+        fi
+    fi
+# Try pacman for Arch systems
+elif command -v pacman &> /dev/null; then
+    print_status "Attempting to install yt-dlp via pacman..."
+    if sudo pacman -S --noconfirm yt-dlp; then
+        print_success "yt-dlp installed successfully via pacman"
+    else
+        print_warning "pacman installation failed, trying pipx..."
+        if command -v pipx &> /dev/null; then
+            pipx install yt-dlp
+        else
+            sudo pacman -S --noconfirm python-pipx && pipx install yt-dlp
+        fi
+    fi
+# Fall back to pip methods
 else
-    python3 -m pip install --upgrade yt-dlp
+    print_status "No system package manager found, using pip methods..."
+    if command -v pipx &> /dev/null; then
+        print_status "Installing yt-dlp via pipx..."
+        pipx install yt-dlp
+    elif command -v pip3 &> /dev/null; then
+        print_status "Installing yt-dlp via pip3 (user install)..."
+        pip3 install --user --upgrade yt-dlp
+    elif python3 -m pip --version &> /dev/null; then
+        print_status "Installing yt-dlp via python3 -m pip (user install)..."
+        python3 -m pip install --user --upgrade yt-dlp
+    else
+        print_error "No suitable installation method found. Please install yt-dlp manually:"
+        echo "  Option 1: Install pipx and run: pipx install yt-dlp"
+        echo "  Option 2: Use system package manager"
+        echo "  Option 3: Create virtual environment and use pip"
+        exit 1
+    fi
 fi
 
 # Check for VLC (optional but recommended)
