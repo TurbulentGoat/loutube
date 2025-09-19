@@ -606,11 +606,11 @@ def show_help():
 YouTube Downloader & Streamer - Usage Guide
 
 BASIC USAGE:
-  ytdl                                    Interactive mode
-  ytdl "https://youtube.com/watch?v=..."  Direct download
-  ytdl --help                            Show this help
-  ytdl --config                          Show current configuration
-  ytdl --recent                          Show recent downloads
+  loutube                                    Interactive mode
+  loutube "https://youtube.com/watch?v=..."  Direct download
+  loutube --help                             Show this help
+  loutube --config                           Show current configuration
+  loutube --recent                           Show recent downloads
 
 FEATURES:
   • High-quality video downloads (up to 1080p) with H.264+AAC
