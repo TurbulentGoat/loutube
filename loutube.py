@@ -34,7 +34,7 @@ def display_logo():
                 break
         
         if logo_path:
-            # Use jp2a command with pv for animated effect
+            # Use jp2a command for ASCII logo display
             command = f"jp2a --colors --chars=' youtube' --height=19 --term-fit '{logo_path}' --color-depth=4"
             
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
