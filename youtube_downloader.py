@@ -14,11 +14,24 @@ DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "ytd-music")
 def display_logo():
     """Display ASCII art logo for the program."""
     try:
-        # Get the script directory and logo path
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        logo_path = os.path.join(script_dir, "loutube.png")
+        # Try multiple locations for the logo
+        possible_paths = [
+            # Installed location (snap-compatible, no dot prefix)
+            os.path.join(Path.home(), "ytdl-logo.png"),
+            # Development/source directory
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "loutube.png"),
+            # Legacy locations
+            os.path.join(Path.home(), ".ytdl-logo.png"),
+            os.path.join(Path.home(), ".local", "share", "ytdl", "loutube.png")
+        ]
         
-        if os.path.exists(logo_path):
+        logo_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                logo_path = path
+                break
+        
+        if logo_path:
             # Use ascii-image-converter command exactly as provided
             command = [
                 "ascii-image-converter", 
@@ -587,13 +600,13 @@ def main():
     # Show configuration info
     config_file = find_config_file()
     if config_file:
-        print(f"Using configuration: {config_file}")
+        print(f"✓ Using configuration: {config_file}")
     else:
-        print("No configuration file found - using built-in defaults")
+        print("! No configuration file found - using built-in defaults")
     
-    print(f"Video directory: {DEFAULT_VIDEO_DIR}")
-    print(f"Music directory: {DEFAULT_MUSIC_DIR}")
-    print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
+    print(f"📁 Video directory: {DEFAULT_VIDEO_DIR}")
+    print(f"🎵 Music directory: {DEFAULT_MUSIC_DIR}")
+    print("💡 Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
     
     # Get browser cookies only when we actually need to use yt-dlp
     browser_cookies = None
