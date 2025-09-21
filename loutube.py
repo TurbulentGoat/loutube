@@ -13,54 +13,22 @@ DEFAULT_VIDEO_DIR = os.path.join(Path.home(), "Videos", "ytd-video")
 DEFAULT_MUSIC_DIR = os.path.join(Path.home(), "Music", "ytd-music")
 
 def display_logo():
-    """Display ASCII art logo for the program."""
-    try:
-        # Try multiple locations for the logo
-        possible_paths = [
-            # Installed location (snap-compatible, no dot prefix)
-            os.path.join(Path.home(), "ytdl-logo.png"),
-            # Development/source directory
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "loutube.png"),
-            # Legacy locations
-            os.path.join(Path.home(), ".ytdl-logo.png"),
-            os.path.join(Path.home(), ".local", "share", "ytdl", "loutube.png")
-        ]
-        
-        logo_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                logo_path = path
-                break
-        
-        if logo_path:
-            # Use jp2a command for ASCII logo display
-            command = f"jp2a --colors --chars=' youtube' --height=19 --term-fit '{logo_path}' --color-depth=4"
-            
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                print(result.stdout)
-                return
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-    except Exception:
-        pass
+    """Display ASCII art logo for the program."""    
+    ascii_name = """
+teeb                          oeeeeeeeeeeeo          yeee                  
+teeb                          ooeeeeeeeeeeo          yeee                  
+teeb                               eeeu              yeee                  
+teeb        .yoooy.   *eee   eee   eeeo  _eee   eee  yeee yooy_     yoooy 
+teeb       ueeu yeet  ueee  *eee*  eeeo  yeee  _eee  yeeeo yeee_  tee  bee
+teeb      _eee   eee* ueee  *eee*  eeeo  yeee  _eee  yeee   eeeo oeee  oeee
+teeb      yeee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeu teee  yeee
+teeb      yeee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeu teeebbeeee
+teeb      *eee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeo ueee     
+teeeeeeee  eee* _eee  oeee  oeee*  eeeo  yeee  yeee  yeee   eee* *eee  yeeb
+teeeeeeee   #eetbe#    #eebb_bee*  eeeo   #eebb*tee  yeetoteeey    #ebteeo 
+"""
     
-    # Fallback: Use the pre-generated ASCII art if ascii-image-converter is not available
-    fallback_ascii = """+++++********************************++++++++++++++++++++++++++++++++++++++++++***********++++++++++++*### +++++++++++++++++++
-+*************************************++++++#@@@ ++++++++++++++++++++++++++++*@@@@@@@@@@@@+++++++++++ @@@#+++++++++++++++++++
-+***************** ********************+++++#@@@#+++++++++++++++++++++++++++++   #@@@@   *+++++++++++ @@@#+++++++++++++++++++
-***************  ***** ****************+++++#@@@ ++++++++++****+++++++++++++++++++@@@%+++++++++++++++ @@@ +****+++++++****+++
-*************** @@%# *******************++++#@@@ +++++++*%@@@@@@%*++%@@@*++@@@@++*@@@%++ @@@%++ @@@#+ @@@%%@@@@%+++*%@@@@@@%+
-*************** @@@@@%#  ***************++++#@@@ +++++++@@@%++%@@@++%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@@*+#@@@#+*@@@#+*@@@%
-*************** @@@@@@@@@# *************++++#@@@ ++++++ @@@#++#@@@ +%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@%+#@@@*++@@@@
-*************** @@@@@%#  ***************++++#@@@ ++++++#@@@#++#@@@#+%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@@+#@@@% #@@@@
-*************** @@%# *******************++++#@@@#++++++#@@@#++#@@@#+%@@@*++@@@@++*@@@%++*@@@%++ @@@#+ @@@#++*@@@@+#@@@%%%####
-***************  ***** ****************+++++#@@@ ++++++#@@@#++#@@@ +%@@@*++@@@@++*@@@%++ @@@%++ @@@#+ @@@ ++*@@@%+#@@@*++****
-+***************** ********************+++++#@@@#*****+*@@@%++%@@@++%@@@ + @@@@++*@@@%++*@@@%++%@@@#+ @@@%++%@@@#+*@@@#++@@@@
-+*************************************++++++#@@@@@@@@@*+ %@@@@@@%*++*@@@@@%#@@@++*@@@%+++#@@@@@#@@@#+ @@@%@@@@@#+++ @@@@@@@%+
-++++********************************++++++++**********++++**  *+++++++*  *++***+++****++++** *++***+++***++***+++++++** **+++"""
-    
-    print(fallback_ascii)
+    print(ascii_name)
 
 # Global variable to cache browser cookies
 _cached_browser_cookies = None
@@ -681,7 +649,7 @@ def show_recent_downloads():
                     if len(files) > 5:
                         print(f"  ... and {len(files) - 5} more files")
                     
-                    print(f"💡 To open this folder: nautilus '{dir_path}' &")
+                    print(f"To open this folder: nautilus '{dir_path}' &")
                 else:
                     print(f"  No files found in {dir_path}")
             except Exception as e:
