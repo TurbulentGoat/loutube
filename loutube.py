@@ -18,16 +18,14 @@ def display_logo():
 teeb                          oeeeeeeeeeeeo          yeee                  
 teeb                          ooeeeeeeeeeeo          yeee                  
 teeb                               eeeu              yeee                  
-teeb        .yoooy.   *eee   eee   eeeo  _eee   eee  yeee yooy_     yoooy 
-teeb       ueeu yeet  ueee  *eee*  eeeo  yeee  _eee  yeeeo yeee_  tee  bee
+teeb        .yoooy.   *eee   eee   eeeo  _eee   eee  yeee yooy.    .yoooy 
+teeb       ueeu yeet  ueee  *eee*  eeeo  yeee  _eee  yeeeo yeee.  tee  bee
 teeb      _eee   eee* ueee  *eee*  eeeo  yeee  _eee  yeee   eeeo oeee  oeee
 teeb      yeee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeu teee  yeee
 teeb      yeee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeu teeebbeeee
 teeb      *eee   eeeo ueee  *eee*  eeeo  yeee  _eee  yeee   eeeo ueee     
-teeeeeeee  eee* _eee  oeee  oeee*  eeeo  yeee  yeee  yeee   eee* *eee  yeeb
-teeeeeeee   #eetbe#    #eebb_bee*  eeeo   #eebb*tee  yeetoteeey    #ebteeo 
-"""
-    
+teeeeeeee  eee* _eee  oeee  oeee*  eeeo  yeee  yeee  yeee   eee,  eee   eeb
+teeeeeeee   #eetbe#    eebb_bee*   eeeo   #eebbtee   yeetoteeey    #ebteeo """
     print(ascii_name)
 
 # Global variable to cache browser cookies
