@@ -39,21 +39,15 @@ A note on cookies: I have put some basic searches in the script to find & use th
  ```
 Now you can use the script from anywhere by simply typing, for example:
   ```bash
-  ytdl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  loutube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   ```
 
 ## Usage
 
 ### Quick Command (after installation)
 ```bash
-ytdl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+loutube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
-
-### Interactive Mode
-```bash
-ytdl
-```
-Follow the prompts to select download type and enter URL.
 
 ## Download Options
 
@@ -91,9 +85,9 @@ Default download locations:
 You can modify these paths by editing the variables at the top of the script.
 
 ## Additional useful commands:  
-`ytdl --help      # Show detailed help`  
-`ytdl --recent    # Show recent downloads`  
-`ytdl --config    # Show current configuration`  
+`loutube --help      # Show detailed help`  
+`loutube --recent    # Show recent downloads`  
+`loutube --config    # Show current configuration`  
 
 ## Browser Support
 
@@ -109,8 +103,6 @@ This allows access to videos that require login or are region-restricted.
 ## Troubleshooting
 
 **"python not found"**: Ensure Python is installed and added to system PATH
-
-**"yt-dlp not found"**: Try `python -m pip install yt-dlp` instead of `pip install yt-dlp`
 
 **"No media player found"**: Install VLC from [videolan.org](https://www.videolan.org/vlc/) or ensure you have a default video player set
 
