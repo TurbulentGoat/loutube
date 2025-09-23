@@ -191,6 +191,17 @@ def sanitize_filename(filename):
     
     return filename if filename else "Unknown"
 
+def sanitize_path(path_str):
+    """Sanitize/normalize a filesystem path: expand user, normalize, and return absolute path."""
+    if not path_str:
+        return path_str
+    try:
+        expanded = os.path.expanduser(path_str)
+        normalized = os.path.normpath(expanded)
+        return normalized
+    except Exception:
+        return path_str
+
 def get_playlist_info(url, browser_cookies=None):
     """Extract playlist/album information from URL using yt-dlp."""
     command = build_base_command(url, browser_cookies)
@@ -466,14 +477,8 @@ def watch_video(url, browser_cookies=None):
     ])
 
     # VLC launch logic goes here...
-    vlc_command = ["vlc", "-"]
-    try:
-        process_ytdlp = subprocess.Popen(command, stdout=subprocess.PIPE)
-        subprocess.run(vlc_command, stdin=process_ytdlp.stdout)
-    finally:
-        if process_ytdlp:
-            process_ytdlp.terminate()
-    
+    vlc_command = ["vlc", "--no-video-title-show", "--avcodec-hw=none", "-"]
+    # We'll start yt-dlp and VLC together below (single controlled flow).
     yt_process = None
     vlc_process = None
     
@@ -573,7 +578,6 @@ def watch_video(url, browser_cookies=None):
                 yt_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 yt_process.kill()
-                
         if vlc_process and vlc_process.poll() is None:
             print("Cleaning up VLC process...")
             vlc_process.terminate()
@@ -581,6 +585,8 @@ def watch_video(url, browser_cookies=None):
                 vlc_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 vlc_process.kill()
+        # Exit the script after streaming to prevent re-opening VLC
+        sys.exit(0)
 
 def download_video(url, browser_cookies=None, output_dir=None):
     """Download video with audio using config file defaults."""
