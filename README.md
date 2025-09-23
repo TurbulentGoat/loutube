@@ -1,4 +1,4 @@
-<img width="1281" height="675" alt="image" src="https://github.com/user-attachments/assets/4474a94c-28c5-463d-aab6-6869d167f184" />
+<img width="520" height="410" alt="image" src="https://github.com/user-attachments/assets/c5db33a8-678f-4cfc-83b1-7477fdbb7085" />
   
 # YouTube Downloader & Streamer
 
