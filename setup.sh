@@ -71,15 +71,6 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Check for pip
-if ! command -v pip3 &> /dev/null && ! python3 -m pip --version &> /dev/null; then
-    print_error "pip is required but not installed."
-    echo "Please install pip first:"
-    echo "  Ubuntu/Debian: sudo apt install python3-pip"
-    echo "  CentOS/RHEL:   sudo yum install python3-pip"
-    exit 1
-fi
-
 # Install yt-dlp
 print_status "Installing/updating yt-dlp..."
 
@@ -169,55 +160,6 @@ if ! command -v vlc &> /dev/null; then
     echo
 fi
 
-# Check for jp2a (for ASCII logo)
-if ! command -v jp2a &> /dev/null; then
-    print_status "jp2a not found. Installing for ASCII logo display..."
-    
-    # Try to install jp2a based on the system
-    if command -v apt &> /dev/null; then
-        if sudo apt update && sudo apt install -y jp2a; then
-            print_success "jp2a installed successfully via apt"
-        else
-            print_warning "Failed to install jp2a via apt. Logo will use fallback display."
-        fi
-    elif command -v yum &> /dev/null; then
-        if sudo yum install -y jp2a; then
-            print_success "jp2a installed successfully via yum"
-        else
-            print_warning "Failed to install jp2a via yum. Logo will use fallback display."
-        fi
-    elif command -v dnf &> /dev/null; then
-        if sudo dnf install -y jp2a; then
-            print_success "jp2a installed successfully via dnf"
-        else
-            print_warning "Failed to install jp2a via dnf. Logo will use fallback display."
-        fi
-    elif command -v pacman &> /dev/null; then
-        if sudo pacman -S --noconfirm jp2a; then
-            print_success "jp2a installed successfully via pacman"
-        else
-            print_warning "Failed to install jp2a via pacman. Logo will use fallback display."
-        fi
-    elif command -v brew &> /dev/null; then
-        if brew install jp2a; then
-            print_success "jp2a installed successfully via brew"
-        else
-            print_warning "Failed to install jp2a via brew. Logo will use fallback display."
-        fi
-    else
-        print_warning "jp2a not found and no supported package manager detected."
-        echo "To install jp2a manually:"
-        echo "  Ubuntu/Debian: sudo apt install jp2a"
-        echo "  CentOS/RHEL:   sudo yum install jp2a"
-        echo "  Arch Linux:    sudo pacman -S jp2a"
-        echo "  macOS:         brew install jp2a"
-        echo "Logo will use fallback display."
-        echo
-    fi
-else
-    print_success "jp2a found - ASCII logo will work"
-fi
-
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
 cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/loutube"
@@ -228,17 +170,9 @@ print_status "Installing configuration file..."
 mkdir -p "$CONFIG_DIR/yt-dlp"
 cp "$SCRIPT_DIR/yt-dlp.conf" "$CONFIG_DIR/yt-dlp/config"
 
-# Copy images if they exist
-if [[ -f "$SCRIPT_DIR/loutube.png" ]]; then
-    # Copy to home directory for snap access compatibility (no dot prefix)
-    cp "$SCRIPT_DIR/loutube.png" "$HOME/ytdl-logo.png"
-    print_status "Logo image copied to $HOME/ytdl-logo.png"
-fi
-
 print_success "Installation complete!"
 echo
 print_status "Usage:"
-echo "  loutube                           - Interactive mode"
 echo "  loutube 'https://youtube.com/...' - Direct URL"
 echo
 print_status "Configuration:"
@@ -254,4 +188,4 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo "  source ~/.bashrc"
 fi
 
-print_success "Setup complete! Try running: loutube"
+print_success "Setup complete! Try running: loutube https://www.youtube.com/watch?v=dQw4w9WgXcQ"
