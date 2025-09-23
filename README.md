@@ -32,8 +32,8 @@ A note on cookies: I have put some basic searches in the script to find & use th
 1. In terminal, go to whichever directory you want to install it.
 2. Run this to take care of the installation and file permissions:
  ```
-  git clone https://github.com/TurbulentGoat/youtube-downloader.git && \
-  cd youtube-downloader && \
+  git clone https://github.com/TurbulentGoat/loutube.git && \
+  cd loutube && \
   chmod +x setup.sh && \
   ./setup.sh
  ```
