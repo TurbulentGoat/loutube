@@ -653,9 +653,15 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    command = build_base_command(url, browser_cookies)
+    # For audio downloads we explicitly ignore the global config file so we
+    # don't accidentally write info.json, subtitles, thumbnails, etc.
+    command = ["yt-dlp", "--no-config"]
+    if browser_cookies:
+        command.extend(["--cookies-from-browser", browser_cookies])
     command.extend([
-        "--extract-audio",  # Config file handles format and quality
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -708,17 +714,19 @@ def download_audio_from_video(url, output_dir, browser_cookies=None):
     os.makedirs(sanitized_dir, exist_ok=True)
     output_template = os.path.join(sanitized_dir, "%(title)s.%(ext)s")
 
-    command = build_base_command(url, browser_cookies)
+    # Ignore global config to avoid extra files and request MP3 explicitly
+    command = ["yt-dlp", "--no-config"]
+    if browser_cookies:
+        command.extend(["--cookies-from-browser", browser_cookies])
     command.extend([
         "--extract-audio",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
     ])
 
-    subprocess.run(command, check=True)
-    print(f"Audio saved to {sanitized_dir}")
-    
     try:
         print(f"Downloading and extracting audio from video: {url}")
         subprocess.run(command, check=True)
