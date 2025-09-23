@@ -6,6 +6,8 @@ import sys
 import platform
 import signal
 import time
+import json
+import re
 from pathlib import Path
 
 # Configuration - Users can modify these paths
@@ -170,6 +172,175 @@ def is_playlist(url):
     query_params = urllib.parse.parse_qs(parsed.query)
     return "list" in query_params
 
+def sanitize_filename(filename):
+    """Sanitize filename by removing or replacing invalid characters."""
+    if not filename:
+        return "Unknown"
+    
+    # Replace invalid characters with safe alternatives
+    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    for char in invalid_chars:
+        filename = filename.replace(char, '_')
+    
+    # Remove leading/trailing dots and spaces
+    filename = filename.strip('. ')
+    
+    # Limit length to avoid filesystem issues
+    if len(filename) > 200:
+        filename = filename[:200] + "..."
+    
+    return filename if filename else "Unknown"
+
+def get_playlist_info(url, browser_cookies=None):
+    """Extract playlist/album information from URL using yt-dlp."""
+    command = build_base_command(url, browser_cookies)
+    command.extend([
+        "--dump-json",
+        "--flat-playlist",
+        "--no-download",
+        url
+    ])
+    
+    try:
+        print("Detecting playlist information...")
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode != 0:
+            print(f"Warning: Could not extract playlist info: {result.stderr}")
+            return None
+        
+        # Parse the first line of JSON output (playlist info)
+        lines = result.stdout.strip().split('\n')
+        if not lines or not lines[0]:
+            return None
+            
+        try:
+            playlist_data = json.loads(lines[0])
+        except json.JSONDecodeError:
+            print("Warning: Could not parse playlist information")
+            return None
+        
+        # Extract relevant information
+        playlist_info = {}
+        
+        # Get playlist title
+        playlist_title = playlist_data.get('title', '')
+        if playlist_title:
+            playlist_info['title'] = sanitize_filename(playlist_title)
+        
+        # Get uploader/channel name
+        uploader = playlist_data.get('uploader', '') or playlist_data.get('channel', '')
+        if uploader:
+            playlist_info['uploader'] = sanitize_filename(uploader)
+        
+        # Detect if this looks like an album
+        is_album = detect_album_pattern(playlist_title, uploader)
+        playlist_info['is_album'] = is_album
+        
+        return playlist_info
+        
+    except subprocess.TimeoutExpired:
+        print("Warning: Timeout while fetching playlist information")
+        return None
+    except Exception as e:
+        print(f"Warning: Error extracting playlist info: {e}")
+        return None
+
+def detect_album_pattern(title, uploader):
+    """Detect if playlist looks like a music album based on title and uploader."""
+    if not title:
+        return False
+    
+    title_lower = title.lower()
+    
+    # Common album indicators
+    album_keywords = [
+        'album', 'ep', 'mixtape', 'lp', 'compilation', 'soundtrack', 
+        'ost', 'single', 'deluxe', 'remastered', 'greatest hits',
+        'the best of', 'collection', 'anthology'
+    ]
+    
+    # Check if title contains album keywords
+    for keyword in album_keywords:
+        if keyword in title_lower:
+            return True
+    
+    # Check if uploader looks like an artist (common patterns)
+    if uploader:
+        uploader_lower = uploader.lower()
+        # Skip obvious non-artist channels
+        non_artist_keywords = [
+            'music', 'records', 'entertainment', 'official', 'vevo',
+            'channel', 'tv', 'radio', 'network', 'media', 'productions'
+        ]
+        
+        is_likely_artist = True
+        for keyword in non_artist_keywords:
+            if keyword in uploader_lower:
+                is_likely_artist = False
+                break
+        
+        # If uploader seems like an artist and title is relatively short, it's probably an album
+        if is_likely_artist and len(title.split()) <= 6:
+            return True
+    
+    return False
+
+def generate_auto_folder_name(url, browser_cookies=None):
+    """Generate folder name automatically based on playlist/video information."""
+    if not is_playlist(url):
+        # For single videos, try to get video info
+        return get_single_video_info(url, browser_cookies)
+    
+    playlist_info = get_playlist_info(url, browser_cookies)
+    
+    if not playlist_info:
+        return "Unknown Playlist"
+    
+    title = playlist_info.get('title', 'Unknown Playlist')
+    uploader = playlist_info.get('uploader', '')
+    is_album = playlist_info.get('is_album', False)
+    
+    if is_album and uploader and uploader.lower() not in title.lower():
+        # Format as "Album Name - Artist Name" for albums
+        folder_name = f"{title} - {uploader}"
+    elif uploader and uploader.lower() not in title.lower():
+        # Format as "Playlist Name - Channel Name" for regular playlists
+        folder_name = f"{title} - {uploader}"
+    else:
+        # Just use the title if uploader is already included or missing
+        folder_name = title
+    
+    print(f"Auto-detected folder name: '{folder_name}'")
+    return folder_name
+
+def get_single_video_info(url, browser_cookies=None):
+    """Get information for a single video."""
+    command = build_base_command(url, browser_cookies)
+    command.extend([
+        "--dump-json",
+        "--no-download",
+        url
+    ])
+    
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+        
+        if result.returncode != 0:
+            return "Unknown Video"
+        
+        video_data = json.loads(result.stdout)
+        title = video_data.get('title', 'Unknown Video')
+        uploader = video_data.get('uploader', '')
+        
+        if uploader and uploader.lower() not in title.lower():
+            return f"{sanitize_filename(title)} - {sanitize_filename(uploader)}"
+        else:
+            return sanitize_filename(title)
+            
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+        return "Unknown Video"
+
 def list_formats(url, browser_cookies=None):
     """List available formats for a video, filtering out m3u8 and mp4 formats and unwanted columns."""
     command = build_base_command(url, browser_cookies)
@@ -264,40 +435,44 @@ def watch_video(url, browser_cookies=None):
     """Stream video at selected quality using VLC."""
     print("Fetching available formats...")
     formats_output = list_formats(url, browser_cookies)
-    
+
+    # Always initialize so it's safe later
+    user_format = ""
+
     if not formats_output:
         print("Could not retrieve format list. Using default format.")
-        format_code = "best[height>=720]/best"
+        format_code = "bestvideo+bestaudio/best"
     else:
         print("\nAvailable formats:")
         print(formats_output)
-        
+
         print("\nEnter format selection:")
         print("- Enter a specific format ID (e.g., '137+140' for video+audio from the ID column)")        
         print("- Press enter to select the highest quality video & audio.")
         user_format = safe_input("\nFormat choice: ").strip()
-        
+
         if not user_format:
-            format_code = "best[height>=720]/best"
-            print("No format specified, using default.")
+            format_code = "bestvideo+bestaudio/best"
+            print("No format specified, using best available quality.")
         else:
             format_code = user_format
-    
+
+    # Build yt-dlp command only once (removed duplicate)
     command = build_base_command(url, browser_cookies)
     command.extend([
         "-f", format_code,
-        "--sponsorblock-remove", "all",
-        "-o", "-",
+        "-o", "-",  # Output to stdout for streaming
         url
     ])
-    
-    # Simplified VLC command - more reliable
-    vlc_command = [
-        "vlc", 
-        "--play-and-exit",           # Exit when playbook ends
-        "--network-caching", "3000", # 3 second cache for better buffering
-        "-"                          # Read from stdin
-    ]
+
+    # VLC launch logic goes here...
+    vlc_command = ["vlc", "-"]
+    try:
+        process_ytdlp = subprocess.Popen(command, stdout=subprocess.PIPE)
+        subprocess.run(vlc_command, stdin=process_ytdlp.stdout)
+    finally:
+        if process_ytdlp:
+            process_ytdlp.terminate()
     
     yt_process = None
     vlc_process = None
@@ -408,7 +583,7 @@ def watch_video(url, browser_cookies=None):
                 vlc_process.kill()
 
 def download_video(url, browser_cookies=None, output_dir=None):
-    """Download video with audio using high-quality defaults."""
+    """Download video with audio using config file defaults."""
     if output_dir is None:
         output_dir = DEFAULT_VIDEO_DIR
     
@@ -420,9 +595,6 @@ def download_video(url, browser_cookies=None, output_dir=None):
     
     command = build_base_command(url, browser_cookies)
     command.extend([
-        # High quality video with audio, prefer h264+aac for compatibility
-        "-f", "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[vcodec=h264]+bestaudio[acodec=aac]/bestvideo+bestaudio/best",
-        "--merge-output-format", "mp4",  # Ensure mp4 container for compatibility
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -436,22 +608,33 @@ def download_video(url, browser_cookies=None, output_dir=None):
         print(f"Video download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
-        print("Note: Video includes chapters, subtitles, and metadata if available.")
+        print("Note: Video includes chapters, subtitles, and metadata (from config).")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
 def download_audio(url, browser_cookies=None, output_dir=None):
-    """Download best audio only with high quality settings."""
+    """Download best audio only using config file defaults."""
     if output_dir is None:
         base_output_dir = DEFAULT_MUSIC_DIR
     else:
         base_output_dir = output_dir
     
-    # Ask for folder name
-    folder_name = safe_input("Enter folder name for this download: ").strip()
+    # Ask for folder name with auto-detection option
+    print("Folder name options:")
+    print("   • Press Enter to auto-detect from playlist/video info")
+    print("   • Type a custom folder name")
+    folder_name = safe_input("Enter folder name (or press Enter for auto-detect): ").strip()
+    
     if not folder_name:
-        folder_name = "Untitled"
+        # Auto-detect folder name
+        folder_name = generate_auto_folder_name(url, browser_cookies)
+        print(f"Using auto-detected folder: '{folder_name}'")
+    else:
+        print(f"Using custom folder: '{folder_name}'")
+    
+    # Sanitize folder name
+    folder_name = sanitize_filename(folder_name)
     
     output_dir = os.path.join(base_output_dir, folder_name)
     os.makedirs(output_dir, exist_ok=True)
@@ -466,8 +649,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     
     command = build_base_command(url, browser_cookies)
     command.extend([
-        "-f", "bestaudio[acodec=aac]/bestaudio/best",  # Prefer AAC for better quality
-        "--extract-audio",
+        "--extract-audio",  # Config file handles format and quality
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -481,7 +663,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         print(f"Audio download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
-        print("Note: Audio includes metadata, thumbnails, and chapter information if available.")
+        print("Note: Audio format, quality, and metadata handled by config file.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download audio.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
@@ -501,8 +683,7 @@ def download_video_no_audio(url, browser_cookies=None, output_dir=None):
     
     command = build_base_command(url, browser_cookies)
     command.extend([
-        "-f", "bestvideo",
-        "--sponsorblock-remove", "all",
+        "-f", "bestvideo",  # Override config for video-only
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -515,27 +696,22 @@ def download_video_no_audio(url, browser_cookies=None, output_dir=None):
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video only.\n{e}")
 
-def download_audio_from_video(url, browser_cookies=None, output_dir=None):
-    """Extract audio from a video track."""
-    if output_dir is None:
-        output_dir = DEFAULT_MUSIC_DIR
-    
-    os.makedirs(output_dir, exist_ok=True)
-    title = safe_input("Output audio title (or press Enter for auto-generated): ").strip()
-    
-    output_template = os.path.join(output_dir, f"{title}.%(ext)s") if title else os.path.join(output_dir, "%(title)s.%(ext)s")
-    
+def download_audio_from_video(url, output_dir, browser_cookies=None):
+    """Download audio only from a video or playlist."""
+    sanitized_dir = sanitize_path(output_dir)
+    os.makedirs(sanitized_dir, exist_ok=True)
+    output_template = os.path.join(sanitized_dir, "%(title)s.%(ext)s")
+
     command = build_base_command(url, browser_cookies)
     command.extend([
-        "-f", "bestvideo+bestaudio",
-        "--sponsorblock-remove", "all",
-        "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
+        "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
     ])
+
+    subprocess.run(command, check=True)
+    print(f"Audio saved to {sanitized_dir}")
     
     try:
         print(f"Downloading and extracting audio from video: {url}")
@@ -552,9 +728,11 @@ def check_for_quit(user_input):
     return user_input
 
 def safe_input(prompt):
-    """Input wrapper that checks for quit command."""
-    user_input = input(prompt)
-    return check_for_quit(user_input)
+    """Wrapper around input() that handles Ctrl-D and quit keywords safely."""
+    try:
+        return check_for_quit(input(prompt))
+    except EOFError:
+        return ""
 
 def check_dependencies():
     """Check if required dependencies are installed."""
@@ -585,6 +763,10 @@ FEATURES:
   • Automatic SponsorBlock integration (removes ads/sponsors)
   • Smart browser cookie detection for private content
   • Playlist support with automatic track numbering
+  • AUTO-DETECTION: Automatically detects playlist/album names
+    - Albums: "Album Name - Artist Name"
+    - Playlists: "Playlist Name - Channel Name"
+    - Single videos: "Video Title - Channel Name"
 
 DIRECTORIES:
   Videos: {DEFAULT_VIDEO_DIR}
@@ -599,6 +781,7 @@ TIPS:
   • Leave titles blank for auto-generated names
   • VLC required for streaming feature
   • Cookies automatically detected from browsers
+  • Folder names auto-detected from playlist metadata
 
 For more information, visit: https://github.com/TurbulentGoat/youtube-downloader
 """.format(DEFAULT_VIDEO_DIR=DEFAULT_VIDEO_DIR, DEFAULT_MUSIC_DIR=DEFAULT_MUSIC_DIR)
@@ -752,6 +935,7 @@ def main():
     
     print(f"Video directory: {DEFAULT_VIDEO_DIR}")
     print(f"Music directory: {DEFAULT_MUSIC_DIR}")
+    print("Smart folder auto-detection for playlists and albums!")
     print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
     
     # Get browser cookies only when we actually need to use yt-dlp
