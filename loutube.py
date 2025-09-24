@@ -30,108 +30,6 @@ teeeeeeee  eee* _eee  oeee  oeee*  eeeo  yeee  yeee  yeee   eee,  eee   eeb
 teeeeeeee   #eetbe#    eebb_bee*   eeeo   #eebbtee   yeetoteeey    #ebteeo """
     print(ascii_name)
 
-# Global variable to cache browser cookies
-_cached_browser_cookies = None
-_cookies_checked = False
-
-def get_brave_snap_path():
-    """
-    Get a generic Brave browser snap path by detecting the user's home directory
-    and finding the active Brave snap profile.
-    Returns the Brave browser path or None if not found.
-    """
-    try:
-        import glob
-        
-        # Get current user's home directory
-        home_dir = str(Path.home())
-        
-        # Look for Brave snap directories (they have version numbers)
-        brave_snap_pattern = os.path.join(home_dir, "snap", "brave", "*", ".config", "BraveSoftware", "Brave-Browser", "Default")
-        brave_paths = glob.glob(brave_snap_pattern)
-        
-        if brave_paths:
-            # Sort by version number (highest first) and return the most recent
-            brave_paths.sort(key=lambda x: int(x.split("/")[-5]) if x.split("/")[-5].isdigit() else 0, reverse=True)
-            # Format as brave:path for yt-dlp
-            return f"brave:{brave_paths[0]}"
-        
-        return None
-    except (ImportError, IndexError, ValueError, OSError):
-        return None
-
-def get_browser_cookies_fast():
-    """
-    Quickly find available browser cookies using a much faster method.
-    Returns the browser cookie string for yt-dlp, or None if none found.
-    """
-    global _cached_browser_cookies, _cookies_checked
-    
-    # Return cached result if already checked
-    if _cookies_checked:
-        return _cached_browser_cookies
-    
-    system = platform.system().lower()
-    
-    # Common browser paths by OS  
-    browser_paths = {
-        'linux': [  # Linux
-            ('brave-snap', get_brave_snap_path()),  # Generic Brave snap path (try first)
-            ('brave', 'brave'),
-            ('firefox', 'firefox'),
-            ('chrome', 'chrome'),
-            ('chromium', 'chromium'),
-            ('edge', 'edge'),
-        ],
-        'darwin': [  # macOS
-            ('firefox', 'firefox'),
-            ('chrome', 'chrome'),
-            ('brave', 'brave'),
-            ('safari', 'safari'),
-            ('edge', 'edge'),
-        ],
-        'windows': [  # Windows
-            ('firefox', 'firefox'),
-            ('chrome', 'chrome'),
-            ('brave', 'brave'),
-            ('edge', 'edge'),
-        ]
-    }
-    
-    if system not in browser_paths:
-        _cookies_checked = True
-        return None
-    
-    # Quick test - just check if yt-dlp recognizes the browser option (much faster than full simulation)
-    for browser_name, browser_key in browser_paths[system]:
-        # Skip if browser_key is None (e.g., when Brave snap path not found)
-        if browser_key is None:
-            continue
-            
-        try:
-            # Just test if yt-dlp accepts the browser option
-            test_command = [
-                "yt-dlp", 
-                "--cookies-from-browser", browser_key,
-                "--version"  # This just tests if the browser option is valid, returns immediately
-            ]
-            result = subprocess.run(test_command, capture_output=True, text=True, timeout=2)
-            if result.returncode == 0:
-                print(f"Using cookies from {browser_name}")
-                _cached_browser_cookies = browser_key
-                _cookies_checked = True
-                return browser_key
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-            continue
-    
-    print("Warning: Could not find browser cookies. Some videos may be unavailable.")
-    _cookies_checked = True
-    return None
-
-def get_browser_cookies():
-    """Legacy function name - calls the fast version"""
-    return get_browser_cookies_fast()
-
 def find_config_file():
     """Find the yt-dlp configuration file."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -152,17 +50,13 @@ def find_config_file():
             return config_path
     return None
 
-def build_base_command(url, browser_cookies=None):
-    """Build the base yt-dlp command with optional cookies and config."""
+def build_base_command(url):
     command = ["yt-dlp"]
     
     # Add configuration file if it exists
     config_file = find_config_file()
     if config_file:
         command.extend(["--config-location", config_file])
-    
-    if browser_cookies:
-        command.extend(["--cookies-from-browser", browser_cookies])
     
     return command
 
@@ -202,9 +96,9 @@ def sanitize_path(path_str):
     except Exception:
         return path_str
 
-def get_playlist_info(url, browser_cookies=None):
+def get_playlist_info(url):
     """Extract playlist/album information from URL using yt-dlp."""
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend([
         "--dump-json",
         "--flat-playlist",
@@ -297,13 +191,13 @@ def detect_album_pattern(title, uploader):
     
     return False
 
-def generate_auto_folder_name(url, browser_cookies=None):
+def generate_auto_folder_name(url):
     """Generate folder name automatically based on playlist/video information."""
     if not is_playlist(url):
         # For single videos, try to get video info
-        return get_single_video_info(url, browser_cookies)
+        return get_single_video_info(url)
     
-    playlist_info = get_playlist_info(url, browser_cookies)
+    playlist_info = get_playlist_info(url)
     
     if not playlist_info:
         return "Unknown Playlist"
@@ -325,9 +219,9 @@ def generate_auto_folder_name(url, browser_cookies=None):
     print(f"Auto-detected folder name: '{folder_name}'")
     return folder_name
 
-def get_single_video_info(url, browser_cookies=None):
+def get_single_video_info(url):
     """Get information for a single video."""
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend([
         "--dump-json",
         "--no-download",
@@ -352,9 +246,9 @@ def get_single_video_info(url, browser_cookies=None):
     except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
         return "Unknown Video"
 
-def list_formats(url, browser_cookies=None):
+def list_formats(url):
     """List available formats for a video, filtering out m3u8 and mp4 formats and unwanted columns."""
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend(["--list-formats", url])
     
     try:
@@ -442,10 +336,10 @@ def check_vlc_compatibility():
     except Exception as e:
         return False, f"VLC check failed: {str(e)}"
 
-def watch_video(url, browser_cookies=None):
+def watch_video(url):
     """Stream video at selected quality using VLC."""
     print("Fetching available formats...")
-    formats_output = list_formats(url, browser_cookies)
+    formats_output = list_formats(url)
 
     # Always initialize so it's safe later
     user_format = ""
@@ -469,7 +363,7 @@ def watch_video(url, browser_cookies=None):
             format_code = user_format
 
     # Build yt-dlp command only once (removed duplicate)
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend([
         "-f", format_code,
         "-o", "-",  # Output to stdout for streaming
@@ -588,7 +482,7 @@ def watch_video(url, browser_cookies=None):
         # Exit the script after streaming to prevent re-opening VLC
         sys.exit(0)
 
-def download_video(url, browser_cookies=None, output_dir=None):
+def download_video(url, output_dir=None):
     """Download video with audio using config file defaults."""
     if output_dir is None:
         output_dir = DEFAULT_VIDEO_DIR
@@ -599,7 +493,7 @@ def download_video(url, browser_cookies=None, output_dir=None):
     # Use auto-generated title if none provided
     output_template = os.path.join(output_dir, f"{video_title}.%(ext)s") if video_title else os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend([
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
@@ -619,7 +513,7 @@ def download_video(url, browser_cookies=None, output_dir=None):
         print(f"Error: Failed to download video.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
-def download_audio(url, browser_cookies=None, output_dir=None):
+def download_audio(url, output_dir=None):
     """Download best audio only using config file defaults."""
     if output_dir is None:
         base_output_dir = DEFAULT_MUSIC_DIR
@@ -634,7 +528,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     
     if not folder_name:
         # Auto-detect folder name
-        folder_name = generate_auto_folder_name(url, browser_cookies)
+        folder_name = generate_auto_folder_name(url)
         print(f"Using auto-detected folder: '{folder_name}'")
     else:
         print(f"Using custom folder: '{folder_name}'")
@@ -656,8 +550,6 @@ def download_audio(url, browser_cookies=None, output_dir=None):
     # For audio downloads we explicitly ignore the global config file so we
     # don't accidentally write info.json, subtitles, thumbnails, etc.
     command = ["yt-dlp", "--no-config"]
-    if browser_cookies:
-        command.extend(["--cookies-from-browser", browser_cookies])
     command.extend([
         "--extract-audio",
         "--audio-format", "mp3",
@@ -680,7 +572,7 @@ def download_audio(url, browser_cookies=None, output_dir=None):
         print(f"Error: Failed to download audio.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
-def download_video_no_audio(url, browser_cookies=None, output_dir=None):
+def download_video_no_audio(url, output_dir=None):
     """Download video only, no audio track."""
     if output_dir is None:
         output_dir = DEFAULT_VIDEO_DIR
@@ -693,7 +585,7 @@ def download_video_no_audio(url, browser_cookies=None, output_dir=None):
     else:
         output_template = os.path.join(output_dir, "%(title)s_video_only.%(ext)s")
     
-    command = build_base_command(url, browser_cookies)
+    command = build_base_command(url)
     command.extend([
         "-f", "bestvideo",  # Override config for video-only
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
@@ -708,7 +600,7 @@ def download_video_no_audio(url, browser_cookies=None, output_dir=None):
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video only.\n{e}")
 
-def download_audio_from_video(url, output_dir, browser_cookies=None):
+def download_audio_from_video(url, output_dir):
     """Download audio only from a video or playlist."""
     sanitized_dir = sanitize_path(output_dir)
     os.makedirs(sanitized_dir, exist_ok=True)
@@ -716,8 +608,6 @@ def download_audio_from_video(url, output_dir, browser_cookies=None):
 
     # Ignore global config to avoid extra files and request MP3 explicitly
     command = ["yt-dlp", "--no-config"]
-    if browser_cookies:
-        command.extend(["--cookies-from-browser", browser_cookies])
     command.extend([
         "--extract-audio",
         "--audio-format", "mp3",
@@ -764,18 +654,16 @@ def show_help():
 YouTube Downloader & Streamer - Usage Guide
 
 BASIC USAGE:
-  loutube                                    Interactive mode
   loutube "https://youtube.com/watch?v=..."  Direct download
   loutube --help                             Show this help
   loutube --config                           Show current configuration
   loutube --recent                           Show recent downloads
 
 FEATURES:
-  • High-quality video downloads (up to 1080p) with H.264+AAC
+  • High-quality video downloads with H.264+AAC
   • Premium audio extraction with metadata and thumbnails  
   • Direct streaming to VLC without downloading
   • Automatic SponsorBlock integration (removes ads/sponsors)
-  • Smart browser cookie detection for private content
   • Playlist support with automatic track numbering
   • AUTO-DETECTION: Automatically detects playlist/album names
     - Albums: "Album Name - Artist Name"
@@ -794,7 +682,6 @@ TIPS:
   • Enter 99 at any prompt to quit
   • Leave titles blank for auto-generated names
   • VLC required for streaming feature
-  • Cookies automatically detected from browsers
   • Folder names auto-detected from playlist metadata
 
 For more information, visit: https://github.com/TurbulentGoat/youtube-downloader
@@ -910,16 +797,6 @@ def show_config():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print(f"  VLC: Not found (streaming unavailable)")
     
-    # Browser cookie status
-    print(f"\nBrowser cookie detection:")
-    browser_cookies = get_browser_cookies_fast()
-    if browser_cookies:
-        print(f"  Status: Using cookies from browser")
-    else:
-        print(f"  Status: No browser cookies found")
-    
-    print(f"\nFor help: python3 {os.path.basename(__file__)} --help")
-
 def main():
     # Check for help or config flags
     if len(sys.argv) > 1:
@@ -951,10 +828,7 @@ def main():
     print(f"Music directory: {DEFAULT_MUSIC_DIR}")
     print("Smart folder auto-detection for playlists and albums!")
     print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
-    
-    # Get browser cookies only when we actually need to use yt-dlp
-    browser_cookies = None
-    
+        
     if len(sys.argv) > 1:
         url = sys.argv[1]
         print("What would you like to do?\n")
@@ -964,13 +838,9 @@ def main():
         print("99. Quit (can be used any time)\n")
         action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
-        
-        # Get cookies only now when we need them
-        if action in ["1", "2", "3"]:
-            browser_cookies = get_browser_cookies()
-            
+          
         if action == "1":
-            watch_video(url, browser_cookies)
+            watch_video(url)
         elif action == "2":
             # Video download options
             print("For video downloads, choose an option:\n")
@@ -981,16 +851,16 @@ def main():
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
-                download_video(url, browser_cookies)
+                download_video(url)
             elif opt == "2":
-                download_video_no_audio(url, browser_cookies)
+                download_video_no_audio(url)
             elif opt == "3":
-                download_audio_from_video(url, browser_cookies)
+                download_audio_from_video(url)
             else:
                 print("Invalid option. Exiting.")
         elif action == "3":
             # Music download - automatically handles playlist detection
-            download_audio(url, browser_cookies)
+            download_audio(url)
         elif action == "99":
             pass  # Already handled by safe_input
         else:
@@ -1011,11 +881,8 @@ def main():
             print("Error: No URL provided.")
             return
 
-        # Get cookies only now when we need them
-        browser_cookies = get_browser_cookies()
-
         if choice == "2":
-            download_audio(url, browser_cookies)
+            download_audio(url)
         elif choice == "1":
             print("For video downloads, choose an option:\n")
             print("1. Video with audio")
@@ -1025,11 +892,11 @@ def main():
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
-                download_video(url, browser_cookies)
+                download_video(url)
             elif opt == "2":
-                download_video_no_audio(url, browser_cookies)
+                download_video_no_audio(url)
             elif opt == "3":
-                download_audio_from_video(url, browser_cookies)
+                download_audio_from_video(url)
             else:
                 print("Invalid option. Exiting.")
 
