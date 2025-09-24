@@ -10,15 +10,14 @@ A Python script for downloading and streaming YouTube videos using yt-dlp. Suppo
 - **Download videos** in various formats with audio
 - **Extract audio only** (MP3 format) for music
 - **Download video without audio** for specific use cases
-- **Automatic browser cookie detection** for accessing private/restricted videos *1
-- **Cross-platform support** for Windows, macOS, and Linux
 - **Smart media player detection** - tries VLC first, falls back to system defaults
 - **SponsorBlock integration** - automatically removes sponsored segments
 - **Playlist support** - handle single videos or entire playlists
 
-## Cookies are tricky! *1
+## Removed auto cookie passing
 
-A note on cookies: I have put some basic searches in the script to find & use the cookies from your browser, but this will likely fail. If you want to download a video that is behind a login, such as a friend's video on Insta, follow the instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) to add the necessary code.
+I have decided to remove the code to pass cookies automatically as I found out youtube bans accounts if they download too much. 
+Instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) to add the necessary code if you want to add cookies to dowload from social media platforms.
 
 ## Requirements
 
