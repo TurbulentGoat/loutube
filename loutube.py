@@ -547,8 +547,6 @@ def download_audio(url, output_dir=None):
         print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    # For audio downloads we explicitly ignore the global config file so we
-    # don't accidentally write info.json, subtitles, thumbnails, etc.
     command = ["yt-dlp", "--no-config"]
     command.extend([
         "--extract-audio",
@@ -608,6 +606,7 @@ def download_audio_from_video(url, output_dir):
 
     # Ignore global config to avoid extra files and request MP3 explicitly
     command = ["yt-dlp", "--no-config"]
+
     command.extend([
         "--extract-audio",
         "--audio-format", "mp3",
@@ -644,7 +643,6 @@ def check_dependencies():
         subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
     except FileNotFoundError:
         print("Error: yt-dlp is not installed or not in PATH.")
-        print("Please install it with: pip install yt-dlp")
         return False
     return True
 
@@ -660,7 +658,7 @@ BASIC USAGE:
   loutube --recent                           Show recent downloads
 
 FEATURES:
-  • High-quality video downloads with H.264+AAC
+  • High-quality video downloads (up to 1080p) with H.264+AAC
   • Premium audio extraction with metadata and thumbnails  
   • Direct streaming to VLC without downloading
   • Automatic SponsorBlock integration (removes ads/sponsors)
@@ -777,7 +775,7 @@ def show_config():
             print(f"Could not read config: {e}")
     else:
         print("Config file: None found")
-        print("Config status: ⚠ Using built-in defaults")
+        print("Config status: Using built-in defaults")
     
     print(f"\nDefault directories:")
     print(f"  Videos: {DEFAULT_VIDEO_DIR}")
@@ -813,10 +811,6 @@ def main():
     if not check_dependencies():
         return
     
-    # Display ASCII logo
-    display_logo()
-    print()
-    
     # Show configuration info
     config_file = find_config_file()
     if config_file:
@@ -828,7 +822,10 @@ def main():
     print(f"Music directory: {DEFAULT_MUSIC_DIR}")
     print("Smart folder auto-detection for playlists and albums!")
     print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
-        
+    
+    # Browser cookies will be requested when needed (not upfront)
+    browser_cookies = None
+    
     if len(sys.argv) > 1:
         url = sys.argv[1]
         print("What would you like to do?\n")
@@ -838,7 +835,8 @@ def main():
         print("99. Quit (can be used any time)\n")
         action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
-          
+        
+
         if action == "1":
             watch_video(url)
         elif action == "2":
@@ -855,12 +853,14 @@ def main():
             elif opt == "2":
                 download_video_no_audio(url)
             elif opt == "3":
-                download_audio_from_video(url)
+                custom_dir = safe_input("Output directory (or press Enter for default music folder): ").strip()
+                output_dir = custom_dir if custom_dir else DEFAULT_MUSIC_DIR
+                download_audio_from_video(url, output_dir)
             else:
                 print("Invalid option. Exiting.")
         elif action == "3":
             # Music download - automatically handles playlist detection
-            download_audio(url)
+            download_audio(url, browser_cookies)
         elif action == "99":
             pass  # Already handled by safe_input
         else:
@@ -896,7 +896,9 @@ def main():
             elif opt == "2":
                 download_video_no_audio(url)
             elif opt == "3":
-                download_audio_from_video(url)
+                custom_dir = safe_input("Output directory (or press Enter for default music folder): ").strip()
+                output_dir = custom_dir if custom_dir else DEFAULT_MUSIC_DIR
+                download_audio_from_video(url, output_dir)
             else:
                 print("Invalid option. Exiting.")
 
