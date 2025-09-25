@@ -506,9 +506,9 @@ def download_audio(url, output_dir=None):
     
     # Ask for folder name with auto-detection option
     print("Folder name options:")
-    print("   • Press Enter to auto-detect from playlist/video info")
-    print("   • Type a custom folder name")
-    folder_name = safe_input("Enter folder name (or press Enter for auto-detect): ").strip()
+    print("   • Press Enter to attempt to auto-detect from playlist/video info (not great),")
+    print("   • Type a custom folder name\n")
+    folder_name = safe_input("Folder name, or Enter: ").strip()
     
     if not folder_name:
         # Auto-detect folder name
@@ -797,26 +797,21 @@ def main():
     
     # Show configuration info
     config_file = find_config_file()
-    if config_file:
-        print(f"Using configuration: {config_file}")
-    else:
-        print("No configuration file found - using built-in defaults")
-    
-    print(f"Video directory: {DEFAULT_VIDEO_DIR}")
-    print(f"Music directory: {DEFAULT_MUSIC_DIR}")
-    print("Smart folder auto-detection for playlists and albums!")
-    print("Tip: Enter 99 at any prompt to quit, or use --help for more info\n")
+    print("\nThanks for using Loutube! A wrapper for 'YT-DLP', making it easier to use!\n")
+    print("To find your downloads, go to:")
+    print(f"Videos are downloaded to: {DEFAULT_VIDEO_DIR}")
+    print(f"Music is downloaded to: {DEFAULT_MUSIC_DIR}")
     
     # Browser cookies will be requested when needed (not upfront)
     browser_cookies = None
     
     if len(sys.argv) > 1:
         url = sys.argv[1]
-        print("What would you like to do?\n")
+        print("\nWhat would you like to do?")
         print("1. Watch video (stream)")
         print("2. Download video")
         print("3. Download music")
-        print("99. Quit (can be used any time)\n")
+        print("99. Quit\n")
         action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
         
@@ -825,11 +820,11 @@ def main():
             watch_video(url)
         elif action == "2":
             # Video download options
-            print("For video downloads, choose an option:\n")
+            print("\nFor video downloads, choose an option:")
             print("1. Video with audio")
             print("2. Video only (no audio)")
             print("3. Audio only (extracted from video)")
-            print("99. Quit (can be used any time)\n")
+            print("99. Quit\n")
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
@@ -850,10 +845,10 @@ def main():
         else:
             print("Invalid choice. Exiting.")
     else:
-        print("Select download type:\n")
+        print("\nSelect download type:")
         print("1. Video")
         print("2. Music")
-        print("99. Quit (can be used any time)\n")
+        print("99. Quit\n")
         choice = safe_input("Enter your choice (1, 2, or 99): ").strip()
         print("")
         if choice not in ("1", "2", "99"):
@@ -868,11 +863,11 @@ def main():
         if choice == "2":
             download_audio(url)
         elif choice == "1":
-            print("For video downloads, choose an option:\n")
+            print("For video downloads, choose an option:")
             print("1. Video with audio")
             print("2. Video only (no audio)")
             print("3. Audio only (extracted from video)")
-            print("99. Quit (can be used any time)\n")
+            print("99. Quit\n")
             opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
             print("")
             if opt == "1":
