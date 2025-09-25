@@ -261,8 +261,8 @@ def get_direct_stream_url(url):
     Uses yt-dlp -g which prints direct URLs for video and audio streams; we return the
     first non-empty line which is usually the combined stream or video stream.
     """
-    command = build_base_command(url)
-    command.extend(["-g", url])
+    # For direct stream retrieval avoid reading config (which may request writing files)
+    command = ["yt-dlp", "--no-config", "--no-write-info-json", "-g", url]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=10)
         if result.returncode != 0:
@@ -376,11 +376,10 @@ def watch_video(url):
     if live:
         print("\nDetected a live stream!")
         print("Options for live streams:")
-        print("  1) Stream live now to VLC (default)")
-        print("  2) Open direct stream URL in VLC (may be lower latency)")
-        print("  3) Record the live stream from its start (if available) using yt-dlp --live-from-start")
-        print("  4) Start recording from now (begin recording current live session)")
-        choice = safe_input("Enter choice (1-4, Enter for 1): ").strip()
+        print("  1) Open direct stream URL in VLC (may be lower latency)")
+        print("  2) Record the live stream from its start (if available) using yt-dlp --live-from-start")
+        print("  3) Start recording from now (begin recording current live session)")
+        choice = safe_input("Enter choice (1-3): ").strip()
         if not choice:
             choice = "1"
     else:
@@ -447,7 +446,7 @@ def watch_video(url):
         print("Note: VLC will open in a separate window")
         
         # If this is a live stream and the user selected option 2 (direct URL), try to open that
-        if live and choice == "2":
+        if live and choice == "1":
             direct = get_direct_stream_url(url)
             if direct:
                 print(f"Opening direct stream URL in VLC: {direct}")
@@ -458,39 +457,40 @@ def watch_video(url):
                 return
             else:
                 print("Could not retrieve direct stream URL, falling back to piping via yt-dlp.")
-
         # If this is a live stream and user selected recording from start, launch yt-dlp with --live-from-start
+        if live and choice == "2":
+            record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
+            os.makedirs(record_dir, exist_ok=True)
+            out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
+            # Use explicit yt-dlp invocation ignoring config to avoid unintended writes
+            record_cmd = ["yt-dlp", "--no-config", "--no-write-info-json", "--live-from-start", "-o", out_template, url]
+            print("Recording live stream from its start using yt-dlp (this may re-download already available segments)...")
+            # Run in the output directory so yt-dlp won't write side files into the repo
+            subprocess.run(record_cmd, cwd=record_dir)
+            return
+
+        # If user chose to start recording from now, run yt-dlp writing to file from the current point
         if live and choice == "3":
             record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
             os.makedirs(record_dir, exist_ok=True)
             out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
-            record_cmd = build_base_command(url)
-            record_cmd.extend(["--live-from-start", "-o", out_template, url])
-            print("Recording live stream from its start using yt-dlp (this may re-download already available segments)...")
-            subprocess.run(record_cmd)
-            return
-
-        # If user chose to start recording from now, run yt-dlp writing to file while also streaming to VLC
-        if live and choice == "4":
-            record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
-            os.makedirs(record_dir, exist_ok=True)
-            out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
-            # We will run yt-dlp writing to file (no --live-from-start) so it records from current point
-            record_cmd = build_base_command(url)
-            record_cmd.extend(["-o", out_template, url])
+            record_cmd = ["yt-dlp", "--no-config", "--no-write-info-json", "-o", out_template, url]
             print("Recording live stream from now (Ctrl+C to stop recording)...")
             try:
-                subprocess.run(record_cmd)
+                subprocess.run(record_cmd, cwd=record_dir)
             except KeyboardInterrupt:
                 print("Recording stopped by user.")
             return
 
         # Start yt-dlp process (default streaming behavior)
+        # Ensure yt-dlp runs in a safe directory so it doesn't write side files into the repo
+        os.makedirs(DEFAULT_VIDEO_DIR, exist_ok=True)
         yt_process = subprocess.Popen(
             command, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
-            bufsize=0  # Unbuffered
+            bufsize=0,  # Unbuffered
+            cwd=DEFAULT_VIDEO_DIR,
         )
         
         # Give yt-dlp a moment to start
@@ -588,7 +588,7 @@ def download_video(url, output_dir=None):
         print(f"Downloading high-quality video from: {url}")
         print(f"Output directory: {output_dir}")
         print("Starting download...")
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, cwd=output_dir)
         print(f"Video download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
@@ -664,7 +664,7 @@ def download_audio(url, output_dir=None):
         print(f"Downloading high-quality audio from: {url}")
         print(f"Output directory: {output_dir}")
         print("Starting download...")
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, cwd=output_dir)
         print(f"Audio download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
@@ -696,7 +696,7 @@ def download_video_no_audio(url, output_dir=None):
     
     try:
         print(f"Downloading video only from: {url}")
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, cwd=output_dir)
         print(f"Video-only download complete! Files saved in '{output_dir}'.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video only.\n{e}")
@@ -721,8 +721,8 @@ def download_audio_from_video(url, output_dir):
 
     try:
         print(f"Downloading and extracting audio from video: {url}")
-        subprocess.run(command, check=True)
-        print(f"Extracted audio complete! Files saved in '{output_dir}'.")
+        subprocess.run(command, check=True, cwd=sanitized_dir)
+        print(f"Extracted audio complete! Files saved in '{sanitized_dir}'.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to extract audio.\n{e}")
 
