@@ -41,6 +41,8 @@ def build_base_command(url):
     config_file = find_config_file()
     if config_file:
         command.extend(["--config-location", config_file])
+    # Always disable writing info json files unless explicitly overridden later
+    command.append("--no-write-info-json")
     
     return command
 
@@ -230,6 +232,50 @@ def get_single_video_info(url):
     except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
         return "Unknown Video"
 
+def is_live_stream(url):
+    """Return True if the given URL refers to a live stream (according to yt-dlp metadata)."""
+    command = build_base_command(url)
+    command.extend([
+        "--dump-json",
+        "--no-download",
+        url
+    ])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+        if result.returncode != 0 or not result.stdout:
+            return False
+        data = json.loads(result.stdout)
+        # yt-dlp may use 'is_live' or 'live_status' fields
+        if data.get('is_live') is True:
+            return True
+        live_status = data.get('live_status')
+        if isinstance(live_status, str) and live_status.lower() in ('is_live', 'live'):
+            return True
+        return False
+    except Exception:
+        return False
+
+def get_direct_stream_url(url):
+    """Return a direct playable URL (usually an m3u8) that VLC can open directly.
+
+    Uses yt-dlp -g which prints direct URLs for video and audio streams; we return the
+    first non-empty line which is usually the combined stream or video stream.
+    """
+    command = build_base_command(url)
+    command.extend(["-g", url])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return None
+        # yt-dlp may print one or multiple lines; pick the first non-empty
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line:
+                return line
+        return None
+    except Exception:
+        return None
+
 def list_formats(url):
     """List available formats for a video, filtering out m3u8 and mp4 formats and unwanted columns."""
     command = build_base_command(url)
@@ -325,6 +371,21 @@ def watch_video(url):
     print("Fetching available formats...")
     formats_output = list_formats(url)
 
+    # Detect live streams and provide recording options
+    live = is_live_stream(url)
+    if live:
+        print("\nDetected a live stream!")
+        print("Options for live streams:")
+        print("  1) Stream live now to VLC (default)")
+        print("  2) Open direct stream URL in VLC (may be lower latency)")
+        print("  3) Record the live stream from its start (if available) using yt-dlp --live-from-start")
+        print("  4) Start recording from now (begin recording current live session)")
+        choice = safe_input("Enter choice (1-4, Enter for 1): ").strip()
+        if not choice:
+            choice = "1"
+    else:
+        choice = None
+
     # Always initialize so it's safe later
     user_format = ""
 
@@ -385,7 +446,46 @@ def watch_video(url):
         print("Starting video stream... (Press Ctrl+C to stop)")
         print("Note: VLC will open in a separate window")
         
-        # Start yt-dlp process
+        # If this is a live stream and the user selected option 2 (direct URL), try to open that
+        if live and choice == "2":
+            direct = get_direct_stream_url(url)
+            if direct:
+                print(f"Opening direct stream URL in VLC: {direct}")
+                vlc_process = subprocess.Popen([
+                    "vlc", "--no-video-title-show", "--avcodec-hw=none", direct
+                ])
+                vlc_process.wait()
+                return
+            else:
+                print("Could not retrieve direct stream URL, falling back to piping via yt-dlp.")
+
+        # If this is a live stream and user selected recording from start, launch yt-dlp with --live-from-start
+        if live and choice == "3":
+            record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
+            os.makedirs(record_dir, exist_ok=True)
+            out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
+            record_cmd = build_base_command(url)
+            record_cmd.extend(["--live-from-start", "-o", out_template, url])
+            print("Recording live stream from its start using yt-dlp (this may re-download already available segments)...")
+            subprocess.run(record_cmd)
+            return
+
+        # If user chose to start recording from now, run yt-dlp writing to file while also streaming to VLC
+        if live and choice == "4":
+            record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
+            os.makedirs(record_dir, exist_ok=True)
+            out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
+            # We will run yt-dlp writing to file (no --live-from-start) so it records from current point
+            record_cmd = build_base_command(url)
+            record_cmd.extend(["-o", out_template, url])
+            print("Recording live stream from now (Ctrl+C to stop recording)...")
+            try:
+                subprocess.run(record_cmd)
+            except KeyboardInterrupt:
+                print("Recording stopped by user.")
+            return
+
+        # Start yt-dlp process (default streaming behavior)
         yt_process = subprocess.Popen(
             command, 
             stdout=subprocess.PIPE, 
@@ -497,6 +597,25 @@ def download_video(url, output_dir=None):
         print(f"Error: Failed to download video.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
 
+def record_live(url, output_dir=None, from_start=False):
+    """Record a live stream to disk. If from_start is True, use --live-from-start to try and capture from the very beginning."""
+    if output_dir is None:
+        output_dir = DEFAULT_VIDEO_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    out_template = os.path.join(output_dir, "%(title)s.%(ext)s")
+
+    cmd = build_base_command(url)
+    if from_start:
+        cmd.append("--live-from-start")
+    cmd.extend(["-o", out_template, url])
+
+    print(f"Recording live stream to: {output_dir} (from_start={from_start})")
+    try:
+        subprocess.run(cmd, check=True)
+        print("Recording finished")
+    except subprocess.CalledProcessError as e:
+        print(f"Error while recording live stream: {e}")
+
 def download_audio(url, output_dir=None):
     """Download best audio only using config file defaults."""
     if output_dir is None:
@@ -517,7 +636,7 @@ def download_audio(url, output_dir=None):
     else:
         print(f"Using custom folder: '{folder_name}'")
     
-    # Sanitize folder name
+    # Sanitise folder name
     folder_name = sanitize_filename(folder_name)
     
     output_dir = os.path.join(base_output_dir, folder_name)
@@ -531,7 +650,7 @@ def download_audio(url, output_dir=None):
         print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    command = ["yt-dlp", "--no-config"]
+    command = ["yt-dlp", "--no-config", "--no-write-info-json"]
     command.extend([
         "--extract-audio",
         "--audio-format", "mp3",
@@ -589,7 +708,7 @@ def download_audio_from_video(url, output_dir):
     output_template = os.path.join(sanitized_dir, "%(title)s.%(ext)s")
 
     # Ignore global config to avoid extra files and request MP3 explicitly
-    command = ["yt-dlp", "--no-config"]
+    command = ["yt-dlp", "--no-config", "--no-write-info-json"]
 
     command.extend([
         "--extract-audio",
