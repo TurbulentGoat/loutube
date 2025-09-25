@@ -8,13 +8,6 @@ set -e  # Exit on any error
 echo "=== YouTube Downloader Setup ==="
 echo
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -73,81 +66,108 @@ fi
 
 # Install yt-dlp
 print_status "Installing/updating yt-dlp..."
+YTDLP_INSTALLED=false
 
-# Try apt first (Debian/Ubuntu systems)
-if command -v apt &> /dev/null; then
-    print_status "Attempting to install yt-dlp via apt..."
-    if sudo apt update && sudo apt install -y yt-dlp; then
-        print_success "yt-dlp installed successfully via apt"
-    else
-        print_warning "apt installation failed, trying alternative methods..."
-        # Fall back to pipx if available
-        if command -v pipx &> /dev/null; then
-            print_status "Installing yt-dlp via pipx..."
-            pipx install yt-dlp
-        else
-            print_status "pipx not found. Installing pipx first..."
-            if sudo apt install -y pipx; then
-                pipx install yt-dlp
-            else
-                print_error "Could not install pipx. Please install yt-dlp manually:"
-                echo "  Option 1: sudo apt install yt-dlp"
-                echo "  Option 2: pipx install yt-dlp"
-                echo "  Option 3: pip install --user yt-dlp"
-                exit 1
-            fi
-        fi
-    fi
-# Try yum/dnf for Red Hat systems
-elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
-    PKG_MGR="yum"
-    if command -v dnf &> /dev/null; then
-        PKG_MGR="dnf"
-    fi
-    print_status "Attempting to install yt-dlp via $PKG_MGR..."
-    if sudo $PKG_MGR install -y yt-dlp; then
-        print_success "yt-dlp installed successfully via $PKG_MGR"
-    else
-        print_warning "$PKG_MGR installation failed, trying pipx..."
-        if command -v pipx &> /dev/null; then
-            pipx install yt-dlp
-        else
-            sudo $PKG_MGR install -y pipx && pipx install yt-dlp
-        fi
-    fi
-# Try pacman for Arch systems
-elif command -v pacman &> /dev/null; then
-    print_status "Attempting to install yt-dlp via pacman..."
-    if sudo pacman -S --noconfirm yt-dlp; then
-        print_success "yt-dlp installed successfully via pacman"
-    else
-        print_warning "pacman installation failed, trying pipx..."
-        if command -v pipx &> /dev/null; then
-            pipx install yt-dlp
-        else
-            sudo pacman -S --noconfirm python-pipx && pipx install yt-dlp
-        fi
-    fi
-# Fall back to pip methods
+# Try pip installation first
+print_status "Attempting to install yt-dlp via pip..."
+echo "Installing yt-dlp via pip typically provides the newest upstream version."
+
+# Choose pip executable
+if command -v pip3 &> /dev/null; then
+    PIP_CMD="pip3"
+elif command -v pip &> /dev/null; then
+    PIP_CMD="pip"
 else
-    print_status "No system package manager found, using pip methods..."
-    if command -v pipx &> /dev/null; then
-        print_status "Installing yt-dlp via pipx..."
-        pipx install yt-dlp
-    elif command -v pip3 &> /dev/null; then
-        print_status "Installing yt-dlp via pip3 (user install)..."
-        pip3 install --user --upgrade yt-dlp
-    elif python3 -m pip --version &> /dev/null; then
-        print_status "Installing yt-dlp via python3 -m pip (user install)..."
-        python3 -m pip install --user --upgrade yt-dlp
+    PIP_CMD="python3 -m pip"
+fi
+
+# Try user installation first (safer)
+print_status "Trying user installation (--user)..."
+if $PIP_CMD install --user yt-dlp &> /dev/null; then
+    print_success "yt-dlp installed via pip (user installation)."
+    YTDLP_INSTALLED=true
+else
+    print_warning "User installation failed. Trying with --break-system-packages..."
+    
+    # Ask for permission to use --break-system-packages
+    if [[ $EUID -ne 0 ]]; then
+        echo "This may require sudo and --break-system-packages flag."
+        read -r -p "Try system installation with sudo? [y/N] " response
+        response=${response,,}
+        
+        if [[ "$response" == "y" || "$response" == "yes" ]]; then
+            if sudo $PIP_CMD install yt-dlp --break-system-packages &> /dev/null; then
+                print_success "yt-dlp installed via pip (system installation)."
+                YTDLP_INSTALLED=true
+            else
+                print_warning "Pip installation failed. Trying package managers..."
+            fi
+        else
+            print_status "Skipping pip installation. Trying package managers..."
+        fi
     else
-        print_error "No suitable installation method found. Please install yt-dlp manually:"
-        echo "  Option 1: Install pipx and run: pipx install yt-dlp"
-        echo "  Option 2: Use system package manager"
-        echo "  Option 3: Create virtual environment and use pip"
+        # Running as root
+        if $PIP_CMD install yt-dlp --break-system-packages &> /dev/null; then
+            print_success "yt-dlp installed via pip."
+            YTDLP_INSTALLED=true
+        else
+            print_warning "Pip installation failed. Trying package managers..."
+        fi
+    fi
+fi
+
+# Fallback to package managers if pip failed
+if [[ "$YTDLP_INSTALLED" == false ]]; then
+    print_status "Trying package manager installation..."
+    
+    # Detect package manager and install
+    if command -v apt &> /dev/null; then
+        print_status "Using apt (Debian/Ubuntu)..."
+        if sudo apt update && sudo apt install -y yt-dlp; then
+            print_success "yt-dlp installed via apt."
+            YTDLP_INSTALLED=true
+        fi
+    elif command -v yum &> /dev/null; then
+        print_status "Using yum (CentOS/RHEL)..."
+        if sudo yum install -y yt-dlp; then
+            print_success "yt-dlp installed via yum."
+            YTDLP_INSTALLED=true
+        fi
+    elif command -v dnf &> /dev/null; then
+        print_status "Using dnf (Fedora)..."
+        if sudo dnf install -y yt-dlp; then
+            print_success "yt-dlp installed via dnf."
+            YTDLP_INSTALLED=true
+        fi
+    elif command -v pacman &> /dev/null; then
+        print_status "Using pacman (Arch Linux)..."
+        if sudo pacman -S --noconfirm yt-dlp; then
+            print_success "yt-dlp installed via pacman."
+            YTDLP_INSTALLED=true
+        fi
+    elif command -v brew &> /dev/null; then
+        print_status "Using brew (macOS)..."
+        if brew install yt-dlp; then
+            print_success "yt-dlp installed via brew."
+            YTDLP_INSTALLED=true
+        fi
+    else
+        print_error "No supported package manager found."
+        print_error "Please install yt-dlp manually:"
+        echo "  • Via pip: pip3 install --user yt-dlp"
+        echo "  • Or download from: https://github.com/yt-dlp/yt-dlp/releases"
         exit 1
     fi
 fi
+
+# Verify yt-dlp installation
+if ! command -v yt-dlp &> /dev/null; then
+    print_error "yt-dlp installation failed or not in PATH."
+    echo "Please install yt-dlp manually and re-run this script."
+    exit 1
+fi
+
+print_success "yt-dlp is available: $(yt-dlp --version 2>/dev/null | head -n1)"
 
 # Check for VLC (optional but recommended)
 if ! command -v vlc &> /dev/null; then
@@ -158,22 +178,69 @@ if ! command -v vlc &> /dev/null; then
     echo "  Arch Linux:    sudo pacman -S vlc"
     echo "  macOS:         brew install --cask vlc"
     echo
+else
+    print_success "VLC found: streaming feature will work."
 fi
 
 # Copy the script to the install directory
 print_status "Installing YouTube downloader script..."
+if [[ ! -f "$SCRIPT_DIR/loutube.py" ]]; then
+    print_error "loutube.py not found in $SCRIPT_DIR"
+    print_error "Make sure loutube.py is in the same directory as this setup script."
+    exit 1
+fi
+
 cp "$SCRIPT_DIR/loutube.py" "$INSTALL_DIR/loutube"
 chmod +x "$INSTALL_DIR/loutube"
 
 # Copy configuration file
 print_status "Installing configuration file..."
-mkdir -p "$CONFIG_DIR/yt-dlp"
-cp "$SCRIPT_DIR/yt-dlp.conf" "$CONFIG_DIR/yt-dlp/config"
+if [[ -f "$SCRIPT_DIR/yt-dlp.conf" ]]; then
+    mkdir -p "$CONFIG_DIR/yt-dlp"
+    cp "$SCRIPT_DIR/yt-dlp.conf" "$CONFIG_DIR/yt-dlp/config"
+    print_success "Configuration file installed."
+else
+    print_warning "yt-dlp.conf not found. Creating basic configuration..."
+    mkdir -p "$CONFIG_DIR/yt-dlp"
+    cat > "$CONFIG_DIR/yt-dlp/config" << 'EOF'
+# Basic yt-dlp configuration for loutube
+--format "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+--merge-output-format mp4
+--write-thumbnail
+--embed-thumbnail
+--write-description
+--write-info-json
+--embed-chapters
+--embed-subs
+--write-auto-subs
+--sub-langs "en.*,en"
+--sponsorblock-mark all
+--sponsorblock-remove sponsor,selfpromo,interaction,intro,outro
+EOF
+    print_success "Basic configuration file created."
+fi
 
-print_success "Installation complete!"
+# Create default directories
+print_status "Creating default directories..."
+mkdir -p "$HOME/Videos/ytd-video"
+mkdir -p "$HOME/Music/ytd-music"
+
+# Final verification
+print_status "Verifying installation..."
+if command -v loutube &> /dev/null; then
+    print_success "Installation complete and verified!"
+else
+    print_warning "loutube command not found. You may need to restart your terminal."
+fi
+
+echo
+print_success "Setup complete!"
 echo
 print_status "Usage:"
 echo "  loutube 'https://youtube.com/...' - Direct URL"
+echo "  loutube --help                   - Show help"
+echo "  loutube --config                 - Show configuration"
+echo "  loutube --recent                 - Show recent downloads"
 echo
 print_status "Configuration:"
 echo "  Config file: $CONFIG_DIR/yt-dlp/config"
@@ -188,4 +255,4 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo "  source ~/.bashrc"
 fi
 
-print_success "Setup complete! Try running: loutube https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+print_success "Try running: loutube https://www.youtube.com/watch?v=dQw4w9WgXcQ"
