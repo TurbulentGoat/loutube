@@ -1,5 +1,3 @@
-<img width="520" height="410" alt="image" src="https://github.com/user-attachments/assets/c5db33a8-678f-4cfc-83b1-7477fdbb7085" />
-  
 # YouTube Downloader & Streamer
 
 A Python script for downloading and streaming YouTube videos using yt-dlp. Supports video downloads, audio extraction, and direct streaming to media players.
