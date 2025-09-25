@@ -12,7 +12,6 @@ A Python script for downloading and streaming YouTube videos using yt-dlp. Suppo
 - **SponsorBlock integration** - automatically removes sponsored segments
 - **Playlist support** - handle single videos or entire playlists
 - **Livestreams!** It now detects if you are trying to watch/download a livestream.
-- **To watch one** - While on the livestream selection, try option 1, but if that does not work, try option 2.  
 
 ## Removed auto cookie passing for Youtube URLs.
 
