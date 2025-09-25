@@ -11,10 +11,13 @@ A Python script for downloading and streaming YouTube videos using yt-dlp. Suppo
 - **Smart media player detection** - tries VLC first, falls back to system defaults
 - **SponsorBlock integration** - automatically removes sponsored segments
 - **Playlist support** - handle single videos or entire playlists
+- **Livestreams!** It now detects if you are trying to watch/download a livestream.
+- **To watch one** - While on the livestream selection, try option 1, but if that does not work, try option 2.  
 
-## Removed auto cookie passing
+## Removed auto cookie passing for Youtube URLs.
 
-I have decided to remove the code to pass cookies automatically as I found out youtube bans accounts if they download too much. 
+I have decided to change the code that passes cookies automatically as I found out youtube bans accounts if they download too much. It still passes cooking/credentials to social media so yout can download from those, but nothing is passed to youtube. Fuck youtube. 
+
 Instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) to add the necessary code if you want to add cookies to dowload from social media platforms.
 
 ## Requirements
