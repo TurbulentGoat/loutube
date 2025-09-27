@@ -1839,6 +1839,272 @@ def select_video_file():
         print("Invalid choice.")
         return None
 
+def show_file_metadata():
+    """Show metadata for a video file with basic or full info options."""
+    print("\n=== File Metadata Viewer ===")
+    
+    # Get file path from user
+    file_path = safe_input("Enter video file path (drag and drop supported): ").strip()
+    file_path = file_path.strip('\'"')  # Remove quotes if drag and dropped
+    
+    if not file_path:
+        print("No file path provided.")
+        return
+    
+    # Expand user path and normalize
+    file_path = os.path.expanduser(file_path)
+    file_path = os.path.normpath(file_path)
+    
+    if not os.path.exists(file_path):
+        print(f"File does not exist: {file_path}")
+        return
+    
+    if not os.path.isfile(file_path):
+        print(f"Path is not a file: {file_path}")
+        return
+    
+    # Choose info level
+    print("\nSelect info level:")
+    print("1. Basic info (essential details only)")
+    print("2. Full info (comprehensive analysis)")
+    print("99. Back to main menu")
+    
+    choice = safe_input("Enter your choice (1, 2, or 99): ").strip()
+    
+    if choice == "99":
+        return
+    elif choice not in ["1", "2"]:
+        print("Invalid choice.")
+        return
+    
+    print(f"\nAnalyzing: {os.path.basename(file_path)}")
+    print("=" * 60)
+    
+    # Check which tools are available
+    tools_available = []
+    
+    # Check for mediainfo (preferred for comprehensive info)
+    try:
+        subprocess.run(["mediainfo", "--version"], capture_output=True, check=True)
+        tools_available.append("mediainfo")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    # Check for ffprobe (part of ffmpeg)
+    try:
+        subprocess.run(["ffprobe", "-version"], capture_output=True, check=True)
+        tools_available.append("ffprobe")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    # Check for exiftool
+    try:
+        subprocess.run(["exiftool", "-ver"], capture_output=True, check=True)
+        tools_available.append("exiftool")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    if not tools_available:
+        print("No metadata tools found. Please install at least one of:")
+        print("- mediainfo: sudo apt install mediainfo")
+        print("- ffprobe (part of ffmpeg): sudo apt install ffmpeg")
+        print("- exiftool: sudo apt install libimage-exiftool-perl")
+        return
+    
+    # Show basic or full info based on user choice
+    if choice == "1":
+        show_basic_metadata(file_path, tools_available)
+    else:
+        show_full_metadata(file_path, tools_available)
+
+def show_basic_metadata(file_path, tools_available):
+    """Show basic metadata information."""
+    try:
+        if "mediainfo" in tools_available:
+            result = subprocess.run(["mediainfo", file_path], capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                
+                # Extract only basic info fields
+                basic_fields = [
+                    'Complete name', 'Format', 'Format version', 'File size', 
+                    'Duration', 'Overall bit rate', 'Frame rate'
+                ]
+                
+                for line in lines:
+                    line = line.strip()
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        if any(field in key for field in basic_fields):
+                            print(f"{key:<35} : {value}")
+            else:
+                print("Failed to run mediainfo")
+        
+        elif "ffprobe" in tools_available:
+            # Fallback to ffprobe if mediainfo not available
+            result = subprocess.run([
+                "ffprobe", "-v", "quiet", "-print_format", "default", 
+                "-show_format", file_path
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                print(f"Complete name                       : {file_path}")
+                
+                for line in lines:
+                    line = line.strip()
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        if key == "format_name":
+                            print(f"Format                              : {value}")
+                        elif key == "duration":
+                            duration_sec = float(value)
+                            minutes = int(duration_sec // 60)
+                            seconds = int(duration_sec % 60)
+                            ms = int((duration_sec % 1) * 1000)
+                            print(f"Duration                            : {minutes} min {seconds} s {ms} ms")
+                        elif key == "size":
+                            size_mb = int(value) / (1024 * 1024)
+                            print(f"File size                           : {size_mb:.2f} MiB")
+                        elif key == "bit_rate":
+                            bit_rate_kb = int(value) // 1000
+                            print(f"Overall bit rate                    : {bit_rate_kb} kb/s")
+            else:
+                print("Failed to run ffprobe")
+        else:
+            print("No suitable tools available for basic metadata extraction")
+    
+    except subprocess.TimeoutExpired:
+        print("Timeout occurred while analyzing file")
+    except Exception as e:
+        print(f"Error analyzing file: {e}")
+    
+    print("\n" + "=" * 60)
+    input("Press Enter to continue...")
+
+def show_full_metadata(file_path, tools_available):
+    """Show comprehensive metadata information."""
+    try:
+        if "mediainfo" in tools_available:
+            print("\n--- MediaInfo ---")
+            result = subprocess.run(["mediainfo", file_path], capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                # Filter out less useful information and format nicely
+                lines = result.stdout.split('\n')
+                useful_lines = []
+                current_section = ""
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Section headers (General, Video, Audio, etc.)
+                    if not line.startswith(' ') and ':' not in line and line:
+                        current_section = line
+                        if current_section in ['General', 'Video', 'Audio']:
+                            useful_lines.append(f"\n{current_section}")
+                    # Useful metadata fields
+                    elif ':' in line and current_section in ['General', 'Video', 'Audio']:
+                        key, value = line.split(':', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # Filter for useful fields
+                        useful_fields = [
+                            'Complete name', 'Format', 'Format profile', 'Codec ID', 
+                            'File size', 'Duration', 'Overall bit rate', 'Frame rate',
+                            'Bit rate', 'Width', 'Height', 'Display aspect ratio',
+                            'Color space', 'Chroma subsampling', 'Bit depth', 
+                            'Scan type', 'Writing library', 'Writing application',
+                            'Sampling rate', 'Channel layout', 'Compression mode'
+                        ]
+                        
+                        if any(field in key for field in useful_fields):
+                            useful_lines.append(f"{key:<35} : {value}")
+                
+                for line in useful_lines:
+                    print(line)
+            else:
+                print("Failed to run mediainfo")
+        
+        if "ffprobe" in tools_available:
+            print("\n--- FFprobe ---")
+            result = subprocess.run([
+                "ffprobe", "-v", "quiet", "-print_format", "default", 
+                "-show_format", "-show_streams", file_path
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                in_format = False
+                in_video_stream = False
+                in_audio_stream = False
+                
+                for line in lines:
+                    line = line.strip()
+                    if line == "[FORMAT]":
+                        in_format = True
+                        print("\nFormat:")
+                        continue
+                    elif line == "[/FORMAT]":
+                        in_format = False
+                        continue
+                    elif line == "[STREAM]":
+                        continue
+                    elif line == "[/STREAM]":
+                        in_video_stream = False
+                        in_audio_stream = False
+                        continue
+                    
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        
+                        if in_format:
+                            useful_format_fields = [
+                                'filename', 'nb_streams', 'format_name', 'format_long_name',
+                                'duration', 'size', 'bit_rate'
+                            ]
+                            if key in useful_format_fields:
+                                print(f"  {key:<20} : {value}")
+                        
+                        elif key == "codec_type":
+                            if value == "video":
+                                in_video_stream = True
+                                print(f"\nVideo Stream:")
+                            elif value == "audio":
+                                in_audio_stream = True
+                                print(f"\nAudio Stream:")
+                        
+                        elif in_video_stream:
+                            useful_video_fields = [
+                                'codec_name', 'codec_long_name', 'width', 'height',
+                                'r_frame_rate', 'avg_frame_rate', 'pix_fmt', 'bit_rate'
+                            ]
+                            if key in useful_video_fields:
+                                print(f"  {key:<20} : {value}")
+                        
+                        elif in_audio_stream:
+                            useful_audio_fields = [
+                                'codec_name', 'codec_long_name', 'sample_rate',
+                                'channels', 'channel_layout', 'bit_rate'
+                            ]
+                            if key in useful_audio_fields:
+                                print(f"  {key:<20} : {value}")
+            else:
+                print("Failed to run ffprobe")
+    
+    except subprocess.TimeoutExpired:
+        print("Timeout occurred while analyzing file")
+    except Exception as e:
+        print(f"Error analyzing file: {e}")
+    
+    print("\n" + "=" * 60)
+    input("Press Enter to continue...")
+
 def video_editor_menu():
     """Main video editor menu."""
     if not check_ffmpeg():
@@ -1936,8 +2202,9 @@ def main():
         print("2. Download video")
         print("3. Download music")
         print("4. Edit videos")
+        print("5. View file metadata")
         print("99. Quit\n")
-        action = safe_input("Enter your choice (1, 2, 3, 4, or 99): ").strip()
+        action = safe_input("Enter your choice (1, 2, 3, 4, 5, or 99): ").strip()
         print("")
         
 
@@ -1968,6 +2235,9 @@ def main():
         elif action == "4":
             # Video editor
             video_editor_menu()
+        elif action == "5":
+            # File metadata viewer
+            show_file_metadata()
         elif action == "99":
             pass  # Already handled by safe_input
         else:
@@ -1977,16 +2247,20 @@ def main():
         print("1. Download video")
         print("2. Download music")
         print("3. Edit videos")
+        print("4. View file metadata")
         print("99. Quit\n")
-        choice = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
+        choice = safe_input("Enter your choice (1, 2, 3, 4, or 99): ").strip()
         print("")
-        if choice not in ("1", "2", "3", "99"):
+        if choice not in ("1", "2", "3", "4", "99"):
             print("Invalid choice. Exiting.")
             return
 
         if choice == "3":
             # Video editor
             video_editor_menu()
+        elif choice == "4":
+            # File metadata viewer
+            show_file_metadata()
         else:
             url = safe_input("Enter the link: ").strip()
             if not url:
