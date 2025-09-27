@@ -796,7 +796,7 @@ FEATURES:
   • High-quality video downloads (up to 1080p) with H.264+AAC
   • Premium audio extraction with metadata and thumbnails  
   • Direct streaming to VLC without downloading
-  • Integrated video editor with ffmpeg (trim, transcode, format conversion, GIF creation, Instagram padding)
+  • Integrated video editor with ffmpeg (trim, transcode, format conversion, GIF creation, Instagram padding, audio extraction, frame rate changes, speed adjustment)
   • Automatic SponsorBlock integration (removes ads/sponsors)
   • Playlist support with automatic track numbering
   • AUTO-DETECTION: Automatically detects playlist/album names
@@ -1456,6 +1456,243 @@ def add_padding(input_file):
             os.remove(temp_palette)
         print(f"✗ Error during padding: {e}")
 
+def extract_audio(input_file):
+    """Extract audio as MP3."""
+    print(f"\n=== Extract Audio: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Audio Quality Settings:")
+    print("1. High quality (320k)")
+    print("2. Good quality (192k)")
+    print("3. Medium quality (128k)")
+    print("4. Low quality (96k)")
+    print("5. Custom bitrate")
+    quality_choice = safe_input("Choose quality (1-5): ").strip()
+    
+    if quality_choice == "1":
+        bitrate = "320k"
+    elif quality_choice == "2":
+        bitrate = "192k"
+    elif quality_choice == "3":
+        bitrate = "128k"
+    elif quality_choice == "4":
+        bitrate = "96k"
+    elif quality_choice == "5":
+        custom_bitrate = safe_input("Enter bitrate (e.g., 256k): ").strip()
+        if custom_bitrate:
+            bitrate = custom_bitrate
+        else:
+            bitrate = "192k"
+            print("Using default: 192k")
+    else:
+        bitrate = "192k"
+        print("Using default: 192k")
+    
+    output_filename = safe_input("Enter output filename (without extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = f"{base_name}_audio"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename + ".mp3")
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Audio Extraction Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Quality: {bitrate}")
+    print(f"Output: {os.path.basename(output_path)}")
+    
+    confirm = safe_input("\nProceed with audio extraction? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Extracting audio...")
+    try:
+        cmd = ["ffmpeg", "-i", input_file, "-vn", "-acodec", "libmp3lame", "-ab", bitrate, output_path]
+        subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Audio extraction completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during audio extraction: {e}")
+
+def remove_audio(input_file):
+    """Remove audio completely from video."""
+    print(f"\n=== Remove Audio: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        extension = os.path.splitext(os.path.basename(input_file))[1]
+        output_filename = f"{base_name}_silent{extension}"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Audio Removal Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Output: {os.path.basename(output_path)}")
+    print("Note: Video will be copied without re-encoding (fast, no quality loss)")
+    
+    confirm = safe_input("\nProceed with audio removal? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Removing audio...")
+    try:
+        cmd = ["ffmpeg", "-i", input_file, "-an", "-c:v", "copy", output_path]
+        subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Audio removal completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during audio removal: {e}")
+
+def change_framerate(input_file):
+    """Change video frame rate."""
+    print(f"\n=== Change Frame Rate: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Common frame rates:")
+    print("• 60 fps (smooth, gaming)")
+    print("• 30 fps (standard)")
+    print("• 24 fps (cinematic)")
+    print("• 15 fps (lower quality)")
+    print("• 10 fps (slideshow-like)")
+    
+    fps_input = safe_input("Enter target frame rate (fps): ").strip()
+    
+    try:
+        fps = float(fps_input)
+        if fps <= 0 or fps > 120:
+            print("Frame rate must be between 0 and 120 fps.")
+            return
+    except ValueError:
+        print("Invalid frame rate. Aborting.")
+        return
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        extension = os.path.splitext(os.path.basename(input_file))[1]
+        output_filename = f"{base_name}_{fps}fps{extension}"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Frame Rate Change Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Target frame rate: {fps} fps")
+    print(f"Output: {os.path.basename(output_path)}")
+    print("Note: Audio will be copied without changes")
+    
+    confirm = safe_input("\nProceed with frame rate change? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Changing frame rate...")
+    try:
+        cmd = ["ffmpeg", "-i", input_file, "-vf", f"fps={fps}", "-c:a", "copy", output_path]
+        subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Frame rate change completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during frame rate change: {e}")
+
+def slow_down_video(input_file):
+    """Slow down video and audio."""
+    print(f"\n=== Slow Down Video: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Slow down options:")
+    print("• Enter percentage slower (e.g., 25 for 25% slower)")
+    print("• Or enter speed multiplier (e.g., 0.5 for half speed)")
+    
+    speed_input = safe_input("Enter slowdown percentage or speed multiplier: ").strip()
+    
+    try:
+        speed_value = float(speed_input)
+        
+        if speed_value > 1 and speed_value <= 99:
+            # User entered percentage (e.g., 25 for 25% slower)
+            speed_multiplier = 1 - (speed_value / 100)
+            percentage_slower = speed_value
+        elif speed_value > 0 and speed_value <= 1:
+            # User entered multiplier (e.g., 0.5 for half speed)
+            speed_multiplier = speed_value
+            percentage_slower = (1 - speed_value) * 100
+        else:
+            print("Invalid input. Use percentage (1-99) or multiplier (0.01-1.0).")
+            return
+    except ValueError:
+        print("Invalid input. Aborting.")
+        return
+    
+    # Calculate PTS multiplier (inverse of speed for video)
+    pts_multiplier = 1 / speed_multiplier
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        extension = os.path.splitext(os.path.basename(input_file))[1]
+        output_filename = f"{base_name}_slow_{int(percentage_slower)}pct{extension}"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Slow Down Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Speed: {speed_multiplier:.2f}x ({percentage_slower:.1f}% slower)")
+    print(f"Output: {os.path.basename(output_path)}")
+    print("Note: Both video and audio will be slowed down proportionally")
+    
+    confirm = safe_input("\nProceed with slowing down? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Slowing down video and audio...")
+    try:
+        # Use filter_complex to slow down both video and audio
+        cmd = ["ffmpeg", "-i", input_file, 
+               "-filter_complex", f"[0:v]setpts={pts_multiplier}*PTS[v];[0:a]atempo={speed_multiplier}[a]",
+               "-map", "[v]", "-map", "[a]", output_path]
+        
+        subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Video slowdown completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during video slowdown: {e}")
+
 def get_recent_video_files(limit=20):
     """Get recently downloaded video files from both directories."""
     video_files = []
@@ -1622,10 +1859,14 @@ def video_editor_menu():
         print("3. Convert format only (no quality change)")
         print("4. Convert to GIF")
         print("5. Add black bars for Instagram (post/reel/story)")
-        print("6. Select different file")
+        print("6. Extract audio as MP3")
+        print("7. Remove audio completely")
+        print("8. Change frame rate")
+        print("9. Slow down video and audio")
+        print("10. Select different file")
         print("99. Back to main menu")
         
-        operation = safe_input("\nEnter your choice (1-6, 99): ").strip()
+        operation = safe_input("\nEnter your choice (1-10, 99): ").strip()
         
         if operation == "99":
             break
@@ -1640,11 +1881,19 @@ def video_editor_menu():
         elif operation == "5":
             add_padding(selected_file)
         elif operation == "6":
+            extract_audio(selected_file)
+        elif operation == "7":
+            remove_audio(selected_file)
+        elif operation == "8":
+            change_framerate(selected_file)
+        elif operation == "9":
+            slow_down_video(selected_file)
+        elif operation == "10":
             continue  # Loop back to file selection
         else:
             print("Invalid choice.")
         
-        if operation in ["1", "2", "3", "4", "5"]:
+        if operation in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
             # Ask if user wants to perform another operation on the same file
             another = safe_input("\nPerform another operation on this file? (y/N): ").strip().lower()
             if another != 'y':
