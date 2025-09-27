@@ -1,6 +1,6 @@
-# YouTube Downloader & Streamer
+# Video Downloader, Streamer, & Basic Editor
 
-A Python script for downloading and streaming YouTube videos using yt-dlp. Supports video downloads, audio extraction, and direct streaming to media players.
+A Python script for downloading and streaming videos from sites such as YouTueb, Facebook, Instagram, Reddit, and music from sites such as YouTube Music using yt-dlp. Supports video downloads, audio extraction, and direct streaming to media players. Now with some basic ffmpeg editing tools.
 
 ## Features
 
@@ -13,6 +13,24 @@ A Python script for downloading and streaming YouTube videos using yt-dlp. Suppo
 - **Playlist support** - handle single videos or entire playlists
 - **Livestreams!** It now detects if you are trying to watch/download a livestream.
 
+## Editing Tools
+
+So far, the following are available:
+
+- Trim video (keep original quality)
+- Transcode video (change quality/codec)
+- Convert format only (no quality change)
+- Convert to GIF
+- Add black bars for Instagram (post/reel/story)
+
+With more to come!
+
+You can select a video file by one of the following methods:
+
+- Recent downloads (previous 20)
+- Browse specific folder
+- Enter file path manually
+
 ## Removed auto cookie passing for Youtube URLs.
 
 I have decided to change the code that passes cookies automatically as I found out youtube bans accounts if they download too much. It still passes cooking/credentials to social media so yout can download from those, but nothing is passed to youtube. Fuck youtube. 
@@ -22,7 +40,7 @@ Instructions on [this page](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-p
 ## Requirements
 
 - Python 3.6 or higher
-- yt-dlp: Will install when you run setup.sh if it is not already installed.
+- yt-dlp: Will install when you run setup.sh if it is not already installed. (Ensure to keep up to date with the most recent nightly builds!)
 - A media player (VLC is recommended, or system default)
 
 ## Installation
