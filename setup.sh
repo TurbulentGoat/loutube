@@ -5,6 +5,13 @@
 
 set -e  # Exit on any error
 
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 echo "=== YouTube Downloader Setup ==="
 echo
 
@@ -169,6 +176,52 @@ fi
 
 print_success "yt-dlp is available: $(yt-dlp --version 2>/dev/null | head -n1)"
 
+# Recommend nightly build update
+echo
+print_status "yt-dlp Nightly Build Recommendation"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo
+print_warning "IMPORTANT: For best compatibility and latest features, we recommend using the nightly build."
+echo
+echo "Why use the nightly build?"
+echo "  • Latest bug fixes and improvements"
+echo "  • Better support for new sites and formats"
+echo "  • Enhanced extractors for YouTube and other platforms"
+echo "  • More stable downloads with latest fixes"
+echo
+echo "The nightly build is generally stable and recommended by the yt-dlp developers."
+echo "Package manager versions can be outdated and may have compatibility issues."
+echo
+print_status "Current version: $(yt-dlp --version 2>/dev/null | head -n1)"
+
+read -r -p "Would you like to update to the latest nightly build now? [Y/n] " response
+response=${response,,}
+
+if [[ "$response" != "n" && "$response" != "no" ]]; then
+    print_status "Updating to nightly build..."
+    echo "This may take a moment to download and install..."
+    
+    if yt-dlp --update-to nightly; then
+        print_success "Successfully updated to nightly build!"
+        echo "New version: $(yt-dlp --version 2>/dev/null | head -n1)"
+    else
+        print_warning "Failed to update to nightly build."
+        print_status "This might be due to:"
+        echo "  • Permission issues (try with sudo if needed)"
+        echo "  • Network connectivity"
+        echo "  • Installation method restrictions"
+        echo
+        print_status "You can manually update later using: yt-dlp --update-to nightly"
+        echo "Or reinstall using pip: pip3 install --upgrade --user yt-dlp[default]"
+    fi
+else
+    print_status "Skipping nightly update."
+    print_warning "Consider updating later for the best experience:"
+    echo "  yt-dlp --update-to nightly"
+fi
+
+echo
+
 # Check for VLC (optional but recommended)
 if ! command -v vlc &> /dev/null; then
     print_warning "VLC not found. Video streaming will not work."
@@ -255,4 +308,8 @@ if [[ $EUID -ne 0 && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo "  source ~/.bashrc"
 fi
 
+print_status "Maintenance tips:"
+echo "  • Keep yt-dlp updated: yt-dlp --update-to nightly"
+echo "  • Check for issues: loutube --config"
+echo
 print_success "Try running: loutube https://www.youtube.com/watch?v=dQw4w9WgXcQ"
