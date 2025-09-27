@@ -8,6 +8,8 @@ import signal
 import time
 import json
 import re
+import glob
+import shutil
 from pathlib import Path
 
 # Configuration - Users can modify these paths
@@ -41,8 +43,33 @@ def build_base_command(url):
     config_file = find_config_file()
     if config_file:
         command.extend(["--config-location", config_file])
-    # Always disable writing info json files unless explicitly overridden later
-    command.append("--no-write-info-json")
+    
+    # Reduce verbose output
+    command.extend([
+        "--no-write-info-json",
+        "--quiet",  # Suppress most output except errors
+        "--newline",  # Ensure progress info is on separate lines
+        "--progress-template", "Downloaded %(progress._downloaded_bytes_str)s of %(progress._total_bytes_str)s (%(progress._percent_str)s) at %(progress._speed_str)s ETA %(progress._eta_str)s"
+    ])
+    
+    return command
+
+def build_streaming_command(url):
+    """Build yt-dlp command for streaming - excludes problematic remux options."""
+    command = ["yt-dlp"]
+    
+    # Add configuration file if it exists
+    config_file = find_config_file()
+    if config_file:
+        command.extend(["--config-location", config_file])
+    
+    # Disable options that don't work with streaming and reduce verbose output
+    command.extend([
+        "--no-write-info-json",
+        "--quiet",
+        "--newline",
+        "--progress-template", "Downloaded %(progress._downloaded_bytes_str)s of %(progress._total_bytes_str)s (%(progress._percent_str)s) at %(progress._speed_str)s ETA %(progress._eta_str)s"
+    ])
     
     return command
 
@@ -278,15 +305,15 @@ def get_direct_stream_url(url):
 
 def list_formats(url):
     """List available formats for a video, filtering out m3u8 and mp4 formats and unwanted columns."""
-    command = build_base_command(url)
+    command = build_streaming_command(url)
     command.extend(["--list-formats", url])
     
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=30)
-        # Filter out m3u8 and mp4 formats from the output and format columns
+        # Filter out m3u8 format from the output and format columns
         filtered_lines = []
         for line in result.stdout.split('\n'):
-            if ('m3u8' not in line.lower() and 'mp4' not in line.lower()) or 'ID' in line or 'format code' in line.lower() or '---' in line:
+            if ('m3u8' not in line.lower()) or 'ID' in line or 'format code' in line.lower() or '---' in line:
                 # Parse and filter columns for each line
                 filtered_line = filter_format_columns(line)
                 if filtered_line:
@@ -311,12 +338,13 @@ def filter_format_columns(line):
     if '---' in line:
         return "---      --------    ------       ------       ----"
     
-    # Parse yt-dlp format which uses pipe separators |
+    # Parse yt-dlp format which uses pipe separators | (2025 releases also use box characters)
     # Format: ID EXT RESOLUTION FPS CH | FILESIZE TBR PROTO | VCODEC VBR ACODEC ABR ASR MORE INFO
     try:
+        parsed_line = line.replace('│', '|')
         # Split by pipe separators
-        if '|' in line:
-            sections = line.split('|')
+        if '|' in parsed_line:
+            sections = parsed_line.split('|')
             if len(sections) >= 3:
                 # Section 1: ID EXT RESOLUTION FPS CH
                 first_section = sections[0].strip().split()
@@ -342,7 +370,7 @@ def filter_format_columns(line):
         
     except (IndexError, ValueError):
         return line  # Return original line if parsing fails
-
+    
 def check_vlc_compatibility():
     """Check if VLC is available for streaming."""
     try:
@@ -389,8 +417,8 @@ def watch_video(url):
     user_format = ""
 
     if not formats_output:
-        print("Could not retrieve format list. Using default format.")
-        format_code = "bestvideo+bestaudio/best"
+        print("Could not retrieve format list. Using config file default.")
+        format_code = None  # Let config file handle default
     else:
         print("\nAvailable formats:")
         print(formats_output)
@@ -401,15 +429,16 @@ def watch_video(url):
         user_format = safe_input("\nFormat choice: ").strip()
 
         if not user_format:
-            format_code = "bestvideo+bestaudio/best"
-            print("No format specified, using best available quality.")
+            format_code = None  # Let config file handle default format
+            print("No format specified, using config file default.")
         else:
             format_code = user_format
 
-    # Build yt-dlp command only once (removed duplicate)
-    command = build_base_command(url)
+    # Build yt-dlp command for streaming (excludes remux options)
+    command = build_streaming_command(url)
+    if format_code:  # Only add format if user specified one
+        command.extend(["-f", format_code])
     command.extend([
-        "-f", format_code,
         "-o", "-",  # Output to stdout for streaming
         url
     ])
@@ -462,8 +491,9 @@ def watch_video(url):
             record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
             os.makedirs(record_dir, exist_ok=True)
             out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
-            # Use explicit yt-dlp invocation ignoring config to avoid unintended writes
-            record_cmd = ["yt-dlp", "--no-config", "--no-write-info-json", "--live-from-start", "-o", out_template, url]
+            # Use build_base_command for consistency
+            record_cmd = build_base_command(url)
+            record_cmd.extend(["--live-from-start", "-o", out_template, url])
             print("Recording live stream from its start using yt-dlp (this may re-download already available segments)...")
             # Run in the output directory so yt-dlp won't write side files into the repo
             subprocess.run(record_cmd, cwd=record_dir)
@@ -474,7 +504,8 @@ def watch_video(url):
             record_dir = safe_input("Output directory for recording (or press Enter for default Videos): ").strip() or DEFAULT_VIDEO_DIR
             os.makedirs(record_dir, exist_ok=True)
             out_template = os.path.join(record_dir, "%(title)s.%(ext)s")
-            record_cmd = ["yt-dlp", "--no-config", "--no-write-info-json", "-o", out_template, url]
+            record_cmd = build_base_command(url)
+            record_cmd.extend(["-o", out_template, url])
             print("Recording live stream from now (Ctrl+C to stop recording)...")
             try:
                 subprocess.run(record_cmd, cwd=record_dir)
@@ -587,9 +618,10 @@ def download_video(url, output_dir=None):
     try:
         print(f"Downloading high-quality video from: {url}")
         print(f"Output directory: {output_dir}")
-        print("Starting download...")
+        print("Starting download... (this may take a few moments)")
+        print("Progress will be shown below:\n")
         subprocess.run(command, check=True, cwd=output_dir)
-        print(f"Video download complete!")
+        print(f"\n✓ Video download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
         print("Note: Video includes chapters, subtitles, and metadata (from config).")
@@ -650,11 +682,9 @@ def download_audio(url, output_dir=None):
         print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    command = ["yt-dlp", "--no-config", "--no-write-info-json"]
+    command = build_base_command(url)
     command.extend([
         "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -663,9 +693,10 @@ def download_audio(url, output_dir=None):
     try:
         print(f"Downloading high-quality audio from: {url}")
         print(f"Output directory: {output_dir}")
-        print("Starting download...")
+        print("Starting download... (this may take a few moments)")
+        print("Progress will be shown below:\n")
         subprocess.run(command, check=True, cwd=output_dir)
-        print(f"Audio download complete!")
+        print(f"\n✓ Audio download complete!")
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
         print("Note: Audio format, quality, and metadata handled by config file.")
@@ -696,8 +727,10 @@ def download_video_no_audio(url, output_dir=None):
     
     try:
         print(f"Downloading video only from: {url}")
+        print("Starting download... (this may take a few moments)")
+        print("Progress will be shown below:\n")
         subprocess.run(command, check=True, cwd=output_dir)
-        print(f"Video-only download complete! Files saved in '{output_dir}'.")
+        print(f"\n✓ Video-only download complete! Files saved in '{output_dir}'.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download video only.\n{e}")
 
@@ -707,13 +740,9 @@ def download_audio_from_video(url, output_dir):
     os.makedirs(sanitized_dir, exist_ok=True)
     output_template = os.path.join(sanitized_dir, "%(title)s.%(ext)s")
 
-    # Ignore global config to avoid extra files and request MP3 explicitly
-    command = ["yt-dlp", "--no-config", "--no-write-info-json"]
-
+    command = build_base_command(url)
     command.extend([
         "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -721,8 +750,10 @@ def download_audio_from_video(url, output_dir):
 
     try:
         print(f"Downloading and extracting audio from video: {url}")
+        print("Starting download... (this may take a few moments)")
+        print("Progress will be shown below:\n")
         subprocess.run(command, check=True, cwd=sanitized_dir)
-        print(f"Extracted audio complete! Files saved in '{sanitized_dir}'.")
+        print(f"\n✓ Extracted audio complete! Files saved in '{sanitized_dir}'.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to extract audio.\n{e}")
 
@@ -759,11 +790,13 @@ BASIC USAGE:
   loutube --help                             Show this help
   loutube --config                           Show current configuration
   loutube --recent                           Show recent downloads
+  loutube --edit                             Launch video editor
 
 FEATURES:
   • High-quality video downloads (up to 1080p) with H.264+AAC
   • Premium audio extraction with metadata and thumbnails  
   • Direct streaming to VLC without downloading
+  • Integrated video editor with ffmpeg (trim, transcode, format conversion, GIF creation, Instagram padding)
   • Automatic SponsorBlock integration (removes ads/sponsors)
   • Playlist support with automatic track numbering
   • AUTO-DETECTION: Automatically detects playlist/album names
@@ -783,7 +816,9 @@ TIPS:
   • Enter 99 at any prompt to quit
   • Leave titles blank for auto-generated names
   • VLC required for streaming feature
+  • ffmpeg required for video editing features
   • Folder names auto-detected from playlist metadata
+  • Video editor supports recent downloads, folder browsing, and manual file selection
 
 For more information, visit: https://github.com/TurbulentGoat/youtube-downloader
 """.format(DEFAULT_VIDEO_DIR=DEFAULT_VIDEO_DIR, DEFAULT_MUSIC_DIR=DEFAULT_MUSIC_DIR)
@@ -898,6 +933,724 @@ def show_config():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print(f"  VLC: Not found (streaming unavailable)")
     
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        print(f"  ffmpeg: Available (video editing works)")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(f"  ffmpeg: Not found (video editing unavailable)")
+
+# === VIDEO EDITING FUNCTIONS ===
+
+def check_ffmpeg():
+    """Check if ffmpeg is available."""
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=5)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+def get_video_info(filepath):
+    """Get video information using ffprobe."""
+    try:
+        # Get duration
+        duration_result = subprocess.run([
+            "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+            "-of", "csv=p=0", filepath
+        ], capture_output=True, text=True, timeout=10)
+        
+        duration = ""
+        if duration_result.returncode == 0 and duration_result.stdout.strip():
+            duration_sec = float(duration_result.stdout.strip())
+            hours = int(duration_sec // 3600)
+            minutes = int((duration_sec % 3600) // 60)
+            seconds = int(duration_sec % 60)
+            duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        # Get resolution
+        resolution_result = subprocess.run([
+            "ffprobe", "-v", "quiet", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height", "-of", "csv=p=0", filepath
+        ], capture_output=True, text=True, timeout=10)
+        
+        resolution = ""
+        if resolution_result.returncode == 0 and resolution_result.stdout.strip():
+            width, height = resolution_result.stdout.strip().split(',')
+            resolution = f"{width}x{height}"
+            
+            # Add quality label
+            height_int = int(height)
+            if height_int >= 2160:
+                quality = "4K (2160p)"
+            elif height_int >= 1440:
+                quality = "1440p (2K)"
+            elif height_int >= 1080:
+                quality = "1080p (Full HD)"
+            elif height_int >= 720:
+                quality = "720p (HD)"
+            elif height_int >= 480:
+                quality = "480p (SD)"
+            else:
+                quality = f"{height_int}p"
+            
+            resolution = f"{resolution} ({quality})"
+        
+        # Get file size
+        file_size = ""
+        if os.path.exists(filepath):
+            size_bytes = os.path.getsize(filepath)
+            if size_bytes >= 1024**3:
+                file_size = f"{size_bytes / (1024**3):.1f} GB"
+            elif size_bytes >= 1024**2:
+                file_size = f"{size_bytes / (1024**2):.1f} MB"
+            else:
+                file_size = f"{size_bytes / 1024:.1f} KB"
+        
+        return {
+            'duration': duration,
+            'resolution': resolution,
+            'file_size': file_size
+        }
+    except Exception as e:
+        print(f"Warning: Could not get video info: {e}")
+        return {'duration': 'Unknown', 'resolution': 'Unknown', 'file_size': 'Unknown'}
+
+def validate_output_path(output_path):
+    """Validate and suggest output filename if file exists."""
+    counter = 1
+    base_path = os.path.splitext(output_path)[0]
+    extension = os.path.splitext(output_path)[1]
+    original_path = output_path
+    
+    while os.path.exists(output_path):
+        overwrite = safe_input(f"File '{os.path.basename(output_path)}' already exists. Overwrite? (y/N): ").strip().lower()
+        if overwrite == 'y':
+            break
+        else:
+            output_path = f"{base_path}_{counter}{extension}"
+            print(f"Suggested filename: {os.path.basename(output_path)}")
+            use_suggested = safe_input("Use this filename? (y/N): ").strip().lower()
+            if use_suggested == 'y':
+                break
+            else:
+                new_filename = safe_input("Enter new filename: ").strip()
+                if new_filename:
+                    output_path = os.path.join(os.path.dirname(output_path), new_filename)
+                else:
+                    output_path = f"{base_path}_{counter}{extension}"
+        counter += 1
+    
+    return output_path
+
+def trim_video(input_file):
+    """Trim video keeping original quality."""
+    print(f"\n=== Trim Video: {os.path.basename(input_file)} ===")
+    
+    # Show video info
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    start_time = safe_input("Enter start time (format: hh:mm:ss or mm:ss or ss): ").strip()
+    if not start_time:
+        print("No start time provided. Aborting.")
+        return
+    
+    end_time = safe_input("Enter end time (format: hh:mm:ss or mm:ss or ss): ").strip()
+    if not end_time:
+        print("No end time provided. Aborting.")
+        return
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = f"{base_name}_trimmed.mp4"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Trim Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Start time: {start_time}")
+    print(f"End time: {end_time}")
+    print(f"Output: {os.path.basename(output_path)}")
+    
+    confirm = safe_input("\nProceed with trimming? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Trimming video...")
+    try:
+        # Check for CUDA support
+        cuda_check = subprocess.run(["ffmpeg", "-hwaccels"], capture_output=True, text=True)
+        use_cuda = "cuda" in cuda_check.stdout if cuda_check.returncode == 0 else False
+        
+        if use_cuda:
+            cmd = ["ffmpeg", "-hwaccel", "cuda", "-ss", start_time, "-i", input_file, 
+                   "-to", end_time, "-c", "copy", output_path]
+        else:
+            cmd = ["ffmpeg", "-ss", start_time, "-i", input_file, 
+                   "-to", end_time, "-c", "copy", output_path]
+        
+        result = subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Trimming completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during trimming: {e}")
+
+def transcode_video(input_file):
+    """Transcode video to change quality/bitrate."""
+    print(f"\n=== Transcode Video: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Enter target video bitrate in kbps:")
+    print("Examples: 500 (low quality), 1000 (medium), 2000 (good), 3000+ (high quality)")
+    bitrate_str = safe_input("Video bitrate (kbps): ").strip()
+    
+    try:
+        bitrate = int(bitrate_str)
+        if bitrate <= 0:
+            raise ValueError("Bitrate must be positive")
+    except ValueError:
+        print("Invalid bitrate. Aborting.")
+        return
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = f"{base_name}_transcoded.mp4"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Transcode Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Target bitrate: {bitrate} kbps")
+    print(f"Output: {os.path.basename(output_path)}")
+    
+    confirm = safe_input("\nProceed with transcoding? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Transcoding video...")
+    try:
+        # Check for NVIDIA GPU support
+        encoders_check = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
+        use_nvenc = "h264_nvenc" in encoders_check.stdout if encoders_check.returncode == 0 else False
+        
+        if use_nvenc:
+            print("Using NVIDIA GPU acceleration (h264_nvenc)")
+            cmd = ["ffmpeg", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", 
+                   "-i", input_file, "-c:v", "h264_nvenc", "-b:v", f"{bitrate}k",
+                   "-minrate", f"{bitrate}k", "-maxrate", f"{bitrate}k", 
+                   "-bufsize", f"{bitrate * 2}k", "-c:a", "aac", output_path]
+        else:
+            print("Using CPU encoding (libx264)")
+            cmd = ["ffmpeg", "-i", input_file, "-c:v", "libx264", "-b:v", f"{bitrate}k",
+                   "-minrate", f"{bitrate}k", "-maxrate", f"{bitrate}k", 
+                   "-bufsize", f"{bitrate * 2}k", "-c:a", "aac", output_path]
+        
+        result = subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Transcoding completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during transcoding: {e}")
+
+def convert_format(input_file):
+    """Convert video format without re-encoding."""
+    print(f"\n=== Convert Format: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = f"{base_name}_converted.mp4"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Format Conversion Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Output: {os.path.basename(output_path)}")
+    print("Note: This will copy streams without re-encoding (fast, no quality loss)")
+    
+    confirm = safe_input("\nProceed with format conversion? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Converting format...")
+    try:
+        cmd = ["ffmpeg", "-i", input_file, "-c", "copy", output_path]
+        result = subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+        print(f"✓ Format conversion completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Error during conversion: {e}")
+
+def convert_to_gif(input_file):
+    """Convert video to GIF."""
+    print(f"\n=== Convert to GIF: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Do you want to convert the entire video or a specific time range?")
+    print("1. Entire video")
+    print("2. Specific time range (trim first)")
+    trim_choice = safe_input("Choice (1-2): ").strip()
+    
+    start_time = ""
+    duration_seconds = ""
+    
+    if trim_choice == "2":
+        start_time = safe_input("Enter start time (format: hh:mm:ss or mm:ss or ss): ").strip()
+        if not start_time:
+            print("No start time provided. Aborting.")
+            return
+        
+        duration_input = safe_input("Enter duration in seconds (how long the GIF should be): ").strip()
+        try:
+            duration_seconds = str(int(duration_input))
+        except ValueError:
+            print("Invalid duration. Aborting.")
+            return
+    
+    print("\nGIF Quality Settings:")
+    gif_width = safe_input("Width (0 = keep original width, or specify pixels like 480, 720, 1080): ").strip()
+    
+    if gif_width == "0" or not gif_width:
+        scale_filter = "scale=-1:-1"
+    else:
+        try:
+            width = int(gif_width)
+            scale_filter = f"scale={width}:-1"
+        except ValueError:
+            print("Invalid width. Using original width.")
+            scale_filter = "scale=-1:-1"
+    
+    print("Frame rate (fps) - lower = smaller file size:")
+    print("Examples: 10 (smooth), 5 (medium), 2 (choppy but small)")
+    gif_fps_input = safe_input("Frame rate: ").strip()
+    
+    try:
+        gif_fps = int(gif_fps_input)
+        if gif_fps < 1 or gif_fps > 60:
+            raise ValueError("FPS out of range")
+    except ValueError:
+        print("Invalid frame rate. Using default of 10 fps.")
+        gif_fps = 10
+    
+    output_filename = safe_input("Enter output filename (with .gif extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_filename = f"{base_name}.gif"
+    elif not output_filename.endswith('.gif'):
+        output_filename += '.gif'
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== GIF Conversion Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    if start_time:
+        print(f"Start time: {start_time}")
+        print(f"Duration: {duration_seconds} seconds")
+    else:
+        print("Range: Entire video")
+    print(f"Width: {'Original' if scale_filter == 'scale=-1:-1' else gif_width + 'px'}")
+    print(f"Frame rate: {gif_fps} fps")
+    print(f"Output: {os.path.basename(output_path)}")
+    
+    confirm = safe_input("\nProceed with GIF conversion? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    print("Converting to GIF...")
+    try:
+        # Create temporary palette file
+        temp_palette = os.path.join(os.path.dirname(input_file), "temp_palette.png")
+        
+        # Build palette generation command
+        palette_cmd = ["ffmpeg", "-y"]
+        if start_time:
+            palette_cmd.extend(["-ss", start_time])
+        palette_cmd.extend(["-i", input_file])
+        if duration_seconds:
+            palette_cmd.extend(["-t", duration_seconds])
+        palette_cmd.extend(["-vf", f"fps={gif_fps},{scale_filter}:flags=lanczos,palettegen=stats_mode=diff", temp_palette])
+        
+        # Generate palette
+        subprocess.run(palette_cmd, check=True, cwd=os.path.dirname(input_file))
+        
+        # Build GIF generation command
+        gif_cmd = ["ffmpeg", "-y"]
+        if start_time:
+            gif_cmd.extend(["-ss", start_time])
+        gif_cmd.extend(["-i", input_file, "-i", temp_palette])
+        if duration_seconds:
+            gif_cmd.extend(["-t", duration_seconds])
+        gif_cmd.extend(["-lavfi", f"fps={gif_fps},{scale_filter}:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle", output_path])
+        
+        # Generate GIF
+        subprocess.run(gif_cmd, check=True, cwd=os.path.dirname(input_file))
+        
+        # Clean up temporary palette
+        if os.path.exists(temp_palette):
+            os.remove(temp_palette)
+        
+        print(f"✓ GIF conversion completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        # Clean up temporary palette on error
+        temp_palette = os.path.join(os.path.dirname(input_file), "temp_palette.png")
+        if os.path.exists(temp_palette):
+            os.remove(temp_palette)
+        print(f"✗ Error during GIF conversion: {e}")
+
+def add_padding(input_file):
+    """Add black bars for Instagram formats."""
+    print(f"\n=== Add Padding: {os.path.basename(input_file)} ===")
+    
+    info = get_video_info(input_file)
+    print(f"Duration: {info['duration']}")
+    print(f"Resolution: {info['resolution']}")
+    print(f"File size: {info['file_size']}")
+    print()
+    
+    print("Instagram Padding Presets:")
+    print("1) Square (1080x1080)")
+    print("2) Portrait (1080x1350)")
+    print("3) Landscape (1080x566)")
+    print("4) Story/Reel (1080x1920)")
+    print("5) Custom size")
+    preset_choice = safe_input("Choose a preset (1-5): ").strip()
+    
+    if preset_choice == "1":
+        out_w, out_h = 1080, 1080
+    elif preset_choice == "2":
+        out_w, out_h = 1080, 1350
+    elif preset_choice == "3":
+        out_w, out_h = 1080, 566
+    elif preset_choice == "4":
+        out_w, out_h = 1080, 1920
+    elif preset_choice == "5":
+        try:
+            out_w = int(safe_input("Enter output width (pixels): ").strip())
+            out_h = int(safe_input("Enter output height (pixels): ").strip())
+        except ValueError:
+            print("Invalid dimensions. Aborting.")
+            return
+    else:
+        print("Invalid choice. Aborting.")
+        return
+    
+    print("\nChoose output type:")
+    print("1) Video (mp4, keep audio)")
+    print("2) GIF (no audio)")
+    out_type = safe_input("Choice (1-2): ").strip()
+    
+    output_filename = safe_input("Enter output filename (with extension): ").strip()
+    if not output_filename:
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        if out_type == "2":
+            output_filename = f"{base_name}_padded.gif"
+        else:
+            output_filename = f"{base_name}_padded.mp4"
+        print(f"Using default filename: {output_filename}")
+    
+    output_path = os.path.join(os.path.dirname(input_file), output_filename)
+    output_path = validate_output_path(output_path)
+    
+    print(f"\n=== Padding Summary ===")
+    print(f"Input: {os.path.basename(input_file)}")
+    print(f"Output resolution: {out_w}x{out_h}")
+    print(f"Output: {os.path.basename(output_path)}")
+    
+    confirm = safe_input("\nProceed with padding? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return
+    
+    # Build scale+pad filter
+    vf = f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2:black"
+    
+    try:
+        if out_type == "1":
+            print("Applying padding to video...")
+            if output_path.endswith('.mp4'):
+                cmd = ["ffmpeg", "-i", input_file, "-vf", vf, "-c:v", "libx264", 
+                       "-c:a", "aac", "-movflags", "+faststart", output_path]
+            else:
+                cmd = ["ffmpeg", "-i", input_file, "-vf", vf, "-c:a", "copy", output_path]
+            
+            subprocess.run(cmd, check=True, cwd=os.path.dirname(input_file))
+            
+        else:  # GIF
+            print("GIF frame rate (fps) - lower = smaller file size:")
+            print("Examples: 15 (smooth), 10 (good), 5 (medium), 2 (small)")
+            gif_fps_input = safe_input("Frame rate: ").strip()
+            
+            try:
+                gif_fps = int(gif_fps_input)
+                if gif_fps < 1 or gif_fps > 30:
+                    raise ValueError("FPS out of range")
+            except ValueError:
+                print("Invalid frame rate. Using default of 10 fps.")
+                gif_fps = 10
+            
+            # Ensure .gif extension
+            if not output_filename.endswith('.gif'):
+                output_filename += '.gif'
+                output_path = os.path.join(os.path.dirname(input_file), output_filename)
+            
+            print(f"Converting padded GIF at {gif_fps} fps...")
+            
+            # Generate palette for padded frames
+            temp_palette = os.path.join(os.path.dirname(input_file), "temp_palette_pad.png")
+            palette_cmd = ["ffmpeg", "-y", "-i", input_file, "-vf", 
+                          f"{vf},fps={gif_fps},palettegen=stats_mode=diff", temp_palette]
+            subprocess.run(palette_cmd, check=True, cwd=os.path.dirname(input_file))
+            
+            # Create GIF using palette
+            gif_cmd = ["ffmpeg", "-y", "-i", input_file, "-i", temp_palette, "-lavfi",
+                      f"{vf},fps={gif_fps}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle", 
+                      output_path]
+            subprocess.run(gif_cmd, check=True, cwd=os.path.dirname(input_file))
+            
+            # Clean up
+            if os.path.exists(temp_palette):
+                os.remove(temp_palette)
+        
+        print(f"✓ Padding completed successfully!")
+        print(f"Output saved: {output_path}")
+        
+    except subprocess.CalledProcessError as e:
+        # Clean up on error
+        temp_palette = os.path.join(os.path.dirname(input_file), "temp_palette_pad.png")
+        if os.path.exists(temp_palette):
+            os.remove(temp_palette)
+        print(f"✗ Error during padding: {e}")
+
+def get_recent_video_files(limit=20):
+    """Get recently downloaded video files from both directories."""
+    video_files = []
+    
+    # Check both video and music directories
+    directories = [DEFAULT_VIDEO_DIR, DEFAULT_MUSIC_DIR]
+    
+    for directory in directories:
+        if os.path.exists(directory):
+            # Look for video files recursively
+            patterns = ['*.mp4', '*.mkv', '*.avi', '*.mov', '*.webm', '*.m4v', '*.flv']
+            
+            for pattern in patterns:
+                files = glob.glob(os.path.join(directory, '**', pattern), recursive=True)
+                for file in files:
+                    try:
+                        mtime = os.path.getmtime(file)
+                        size = os.path.getsize(file)
+                        video_files.append({
+                            'path': file,
+                            'name': os.path.basename(file),
+                            'mtime': mtime,
+                            'size': size,
+                            'directory': os.path.dirname(file)
+                        })
+                    except OSError:
+                        continue
+    
+    # Sort by modification time (newest first) and limit
+    video_files.sort(key=lambda x: x['mtime'], reverse=True)
+    return video_files[:limit]
+
+def select_video_file():
+    """Interactive video file selection."""
+    print("\n=== Select Video File ===")
+    print("1. Recent downloads")
+    print("2. Browse specific folder")
+    print("3. Enter file path manually")
+    print("99. Back to main menu")
+    
+    choice = safe_input("\nEnter your choice (1-3, 99): ").strip()
+    
+    if choice == "99":
+        return None
+    elif choice == "1":
+        # Recent files
+        recent_files = get_recent_video_files()
+        
+        if not recent_files:
+            print("No recent video files found.")
+            return None
+        
+        print(f"\n=== Recent Video Files ===")
+        for i, file_info in enumerate(recent_files, 1):
+            size_mb = file_info['size'] / (1024 * 1024)
+            print(f"{i:2d}. {file_info['name']} ({size_mb:.1f} MB)")
+            print(f"     {file_info['directory']}")
+        
+        print(f"{len(recent_files) + 1:2d}. Browse specific folder")
+        print("99. Back")
+        
+        file_choice = safe_input(f"\nSelect file (1-{len(recent_files)}, {len(recent_files) + 1}, 99): ").strip()
+        
+        if file_choice == "99":
+            return None
+        elif file_choice == str(len(recent_files) + 1):
+            return select_video_file()  # Recurse to folder browse
+        else:
+            try:
+                index = int(file_choice) - 1
+                if 0 <= index < len(recent_files):
+                    return recent_files[index]['path']
+                else:
+                    print("Invalid selection.")
+                    return None
+            except ValueError:
+                print("Invalid input.")
+                return None
+                
+    elif choice == "2":
+        # Browse folder
+        folder_path = safe_input("Enter folder path (drag and drop supported): ").strip()
+        folder_path = folder_path.strip('\'"')  # Remove quotes
+        
+        if not folder_path:
+            return None
+        
+        if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+            print("Invalid folder path.")
+            return None
+        
+        # Find video files in folder
+        video_files = []
+        patterns = ['*.mp4', '*.mkv', '*.avi', '*.mov', '*.webm', '*.m4v', '*.flv']
+        
+        for pattern in patterns:
+            files = glob.glob(os.path.join(folder_path, pattern))
+            video_files.extend(files)
+        
+        if not video_files:
+            print("No video files found in the specified folder.")
+            return None
+        
+        video_files.sort()
+        
+        print(f"\n=== Video Files in {folder_path} ===")
+        for i, file_path in enumerate(video_files, 1):
+            file_size = os.path.getsize(file_path) / (1024 * 1024)
+            print(f"{i:2d}. {os.path.basename(file_path)} ({file_size:.1f} MB)")
+        
+        print("99. Back")
+        
+        file_choice = safe_input(f"\nSelect file (1-{len(video_files)}, 99): ").strip()
+        
+        if file_choice == "99":
+            return None
+        
+        try:
+            index = int(file_choice) - 1
+            if 0 <= index < len(video_files):
+                return video_files[index]
+            else:
+                print("Invalid selection.")
+                return None
+        except ValueError:
+            print("Invalid input.")
+            return None
+            
+    elif choice == "3":
+        # Manual path entry
+        file_path = safe_input("Enter video file path (drag and drop supported): ").strip()
+        file_path = file_path.strip('\'"')  # Remove quotes
+        
+        if not file_path:
+            return None
+        
+        if not os.path.exists(file_path) or not os.path.isfile(file_path):
+            print("File does not exist.")
+            return None
+        
+        return file_path
+    
+    else:
+        print("Invalid choice.")
+        return None
+
+def video_editor_menu():
+    """Main video editor menu."""
+    if not check_ffmpeg():
+        print("Error: ffmpeg is not installed or not in PATH")
+        print("Please install ffmpeg first: https://ffmpeg.org/download.html")
+        return
+    
+    while True:
+        selected_file = select_video_file()
+        
+        if not selected_file:
+            break
+        
+        print(f"\n=== Video Editor - {os.path.basename(selected_file)} ===")
+        print("Choose an operation:")
+        print("1. Trim video (keep original quality)")
+        print("2. Transcode video (change quality/codec)")
+        print("3. Convert format only (no quality change)")
+        print("4. Convert to GIF")
+        print("5. Add black bars for Instagram (post/reel/story)")
+        print("6. Select different file")
+        print("99. Back to main menu")
+        
+        operation = safe_input("\nEnter your choice (1-6, 99): ").strip()
+        
+        if operation == "99":
+            break
+        elif operation == "1":
+            trim_video(selected_file)
+        elif operation == "2":
+            transcode_video(selected_file)
+        elif operation == "3":
+            convert_format(selected_file)
+        elif operation == "4":
+            convert_to_gif(selected_file)
+        elif operation == "5":
+            add_padding(selected_file)
+        elif operation == "6":
+            continue  # Loop back to file selection
+        else:
+            print("Invalid choice.")
+        
+        if operation in ["1", "2", "3", "4", "5"]:
+            # Ask if user wants to perform another operation on the same file
+            another = safe_input("\nPerform another operation on this file? (y/N): ").strip().lower()
+            if another != 'y':
+                break
+
+    
 def main():
     # Check for help or config flags
     if len(sys.argv) > 1:
@@ -909,6 +1662,9 @@ def main():
             return
         elif sys.argv[1] in ['--recent', '-r', 'recent']:
             show_recent_downloads()
+            return
+        elif sys.argv[1] in ['--edit', '-e', 'edit']:
+            video_editor_menu()
             return
         
     if not check_dependencies():
@@ -930,8 +1686,9 @@ def main():
         print("1. Watch video (stream)")
         print("2. Download video")
         print("3. Download music")
+        print("4. Edit videos")
         print("99. Quit\n")
-        action = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
+        action = safe_input("Enter your choice (1, 2, 3, 4, or 99): ").strip()
         print("")
         
 
@@ -958,47 +1715,55 @@ def main():
                 print("Invalid option. Exiting.")
         elif action == "3":
             # Music download - automatically handles playlist detection
-            download_audio(url, browser_cookies)
+            download_audio(url)
+        elif action == "4":
+            # Video editor
+            video_editor_menu()
         elif action == "99":
             pass  # Already handled by safe_input
         else:
             print("Invalid choice. Exiting.")
     else:
-        print("\nSelect download type:")
-        print("1. Video")
-        print("2. Music")
+        print("\nSelect option:")
+        print("1. Download video")
+        print("2. Download music")
+        print("3. Edit videos")
         print("99. Quit\n")
-        choice = safe_input("Enter your choice (1, 2, or 99): ").strip()
+        choice = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
         print("")
-        if choice not in ("1", "2", "99"):
+        if choice not in ("1", "2", "3", "99"):
             print("Invalid choice. Exiting.")
             return
 
-        url = safe_input("Enter the link: ").strip()
-        if not url:
-            print("Error: No URL provided.")
-            return
+        if choice == "3":
+            # Video editor
+            video_editor_menu()
+        else:
+            url = safe_input("Enter the link: ").strip()
+            if not url:
+                print("Error: No URL provided.")
+                return
 
-        if choice == "2":
-            download_audio(url)
-        elif choice == "1":
-            print("For video downloads, choose an option:")
-            print("1. Video with audio")
-            print("2. Video only (no audio)")
-            print("3. Audio only (extracted from video)")
-            print("99. Quit\n")
-            opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
-            print("")
-            if opt == "1":
-                download_video(url)
-            elif opt == "2":
-                download_video_no_audio(url)
-            elif opt == "3":
-                custom_dir = safe_input("Output directory (or press Enter for default music folder): ").strip()
-                output_dir = custom_dir if custom_dir else DEFAULT_MUSIC_DIR
-                download_audio_from_video(url, output_dir)
-            else:
-                print("Invalid option. Exiting.")
+            if choice == "2":
+                download_audio(url)
+            elif choice == "1":
+                print("For video downloads, choose an option:")
+                print("1. Video with audio")
+                print("2. Video only (no audio)")
+                print("3. Audio only (extracted from video)")
+                print("99. Quit\n")
+                opt = safe_input("Enter your choice (1, 2, 3, or 99): ").strip()
+                print("")
+                if opt == "1":
+                    download_video(url)
+                elif opt == "2":
+                    download_video_no_audio(url)
+                elif opt == "3":
+                    custom_dir = safe_input("Output directory (or press Enter for default music folder): ").strip()
+                    output_dir = custom_dir if custom_dir else DEFAULT_MUSIC_DIR
+                    download_audio_from_video(url, output_dir)
+                else:
+                    print("Invalid option. Exiting.")
 
 if __name__ == "__main__":
     main()
