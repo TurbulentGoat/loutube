@@ -21,42 +21,33 @@ YOUTUBE_HOST_SUFFIXES = (
     "youtube-nocookie.com",
 )
 
-def draw_progress_bar(percentage, width=50, speed="", eta="", downloaded="", total=""):
-    """Draw a horizontal progress bar in-place on a single terminal line."""
+def draw_progress_counter(percentage, speed="", eta="", downloaded="", total=""):
+    """Display a simple percentage counter on a single line."""
     # Clamp percentage to 0-100 range
     percentage = max(0, min(100, percentage))
-
-    filled_width = int(width * percentage / 100)
-    bar = '█' * filled_width + '░' * (width - filled_width)
-    percentage_str = f"{percentage:6.1f}%"
-
-    # Build the progress line
-    progress_line = f"[{bar}] {percentage_str}"
-
+    
+    # Build the progress line with just the percentage
+    progress_line = f"Progress: {percentage:6.1f}%"
+    
     # Add additional info if available
     if downloaded and total and total != "N/A":
-        progress_line += f" {downloaded}/{total}"
+        progress_line += f" ({downloaded}/{total})"
     elif downloaded:
-        progress_line += f" {downloaded}"
-
+        progress_line += f" ({downloaded})"
+    
     if speed and speed != "Unknown":
         progress_line += f" at {speed}"
     if eta and eta not in {"Unknown", "N/A"}:
         progress_line += f" ETA {eta}"
 
-    # Ensure the line fits within the terminal width
-    terminal_width = shutil.get_terminal_size(fallback=(120, 20)).columns
-    max_width = max(40, terminal_width - 1)  # leave room for carriage return
-    if len(progress_line) > max_width:
-        progress_line = progress_line[: max_width - 3] + "..."
-
-    previous_length = getattr(draw_progress_bar, "_prev_length", 0)
+    # Get previous length for padding
+    previous_length = getattr(draw_progress_counter, "_prev_length", 0)
     padding = " " * max(0, previous_length - len(progress_line))
 
     sys.stdout.write("\r" + progress_line + padding)
     sys.stdout.flush()
 
-    draw_progress_bar._prev_length = len(progress_line)
+    draw_progress_counter._prev_length = len(progress_line)
 
 def parse_progress_line(line):
     """Parse yt-dlp progress line and extract percentage, speed, eta, etc."""
@@ -97,8 +88,8 @@ def parse_progress_line(line):
     
     return None
 
-def run_with_progress_bar(command, cwd=None):
-    """Run a command and display a horizontal progress bar instead of vertical progress"""
+def run_with_progress_counter(command, cwd=None):
+    """Run a command and display a simple percentage counter instead of vertical progress"""
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -108,9 +99,9 @@ def run_with_progress_bar(command, cwd=None):
         cwd=cwd
     )
     
-    draw_progress_bar._prev_length = 0
+    draw_progress_counter._prev_length = 0
     had_progress = False
-    
+
     try:
         for line in iter(process.stdout.readline, ''):
             line = line.strip()
@@ -120,8 +111,8 @@ def run_with_progress_bar(command, cwd=None):
             # Check if this is a progress line
             progress_info = parse_progress_line(line)
             if progress_info:
-                # Update progress bar
-                draw_progress_bar(
+                # Update progress counter
+                draw_progress_counter(
                     progress_info['percentage'],
                     downloaded=progress_info['downloaded'],
                     total=progress_info['total'],
@@ -131,12 +122,12 @@ def run_with_progress_bar(command, cwd=None):
                 had_progress = True
             else:
                 # If it's not a progress line and it's not just another download info line
-                # Print it, but first move to a new line if we had a progress bar
+                # Print it, but first move to a new line if we had a progress counter
                 if 'Downloaded' not in line and '[download]' not in line.lower():
                     if had_progress:
                         sys.stdout.write("\n")
                         sys.stdout.flush()
-                        draw_progress_bar._prev_length = 0
+                        draw_progress_counter._prev_length = 0
                         had_progress = False
                     print(line)
                 # Also show important messages even if they contain 'Downloaded'
@@ -144,19 +135,19 @@ def run_with_progress_bar(command, cwd=None):
                     if had_progress:
                         sys.stdout.write("\n")
                         sys.stdout.flush()
-                        draw_progress_bar._prev_length = 0
+                        draw_progress_counter._prev_length = 0
                         had_progress = False
                     print(line)
         
         # Wait for process to complete
         process.wait()
         
-        # Print final newline after progress bar
+        # Print final newline after progress counter
         if had_progress:
             sys.stdout.write("\n")
             sys.stdout.flush()
-            draw_progress_bar._prev_length = 0
-            
+            draw_progress_counter._prev_length = 0
+
         return process.returncode
         
     except KeyboardInterrupt:
@@ -164,10 +155,8 @@ def run_with_progress_bar(command, cwd=None):
         process.wait()
         sys.stdout.write("\nDownload interrupted by user.\n")
         sys.stdout.flush()
-        draw_progress_bar._prev_length = 0
+        draw_progress_counter._prev_length = 0
         raise
-
-
 def _normalize_host(netloc):
     """Return lower-cased host without credentials or port."""
     if not netloc:
@@ -916,7 +905,7 @@ def download_video(url, output_dir=None):
         print("Starting download... (this may take a few moments)")
         print("Progress:")
         
-        returncode = run_with_progress_bar(command, cwd=output_dir)
+        returncode = run_with_progress_counter(command, cwd=output_dir)
         if returncode == 0:
             print(f"✓ Video download complete!")
             print(f"Files saved in: {output_dir}")
@@ -945,7 +934,7 @@ def record_live(url, output_dir=None, from_start=False):
     print(f"Recording live stream to: {output_dir} (from_start={from_start})")
     print("Progress:")
     try:
-        returncode = run_with_progress_bar(cmd, cwd=output_dir)
+        returncode = run_with_progress_counter(cmd, cwd=output_dir)
         if returncode == 0:
             print("Recording finished")
         else:
@@ -1077,7 +1066,7 @@ def download_live_from_start(url, output_dir=None):
             print("⚠️  Facebook limitation: May only download recent segments")
         print("Progress:")
         
-        returncode = run_with_progress_bar(command, cwd=output_dir)
+        returncode = run_with_progress_counter(command, cwd=output_dir)
         if returncode == 0:
             print("✓ Live stream download complete!")
         else:
@@ -1177,7 +1166,7 @@ def download_audio(url, output_dir=None):
         print("Starting download... (this may take a few moments)")
         print("Progress:")
         
-        returncode = run_with_progress_bar(command, cwd=output_dir)
+        returncode = run_with_progress_counter(command, cwd=output_dir)
         if returncode == 0:
             print("✓ Audio download complete!")
         else:
@@ -1216,7 +1205,7 @@ def download_video_no_audio(url, output_dir=None):
         print("Starting download... (this may take a few moments)")
         print("Progress:")
         
-        returncode = run_with_progress_bar(command, cwd=output_dir)
+        returncode = run_with_progress_counter(command, cwd=output_dir)
         if returncode == 0:
             print(f"✓ Video-only download complete! Files saved in '{output_dir}'.")
         else:
@@ -1244,7 +1233,7 @@ def download_audio_from_video(url, output_dir):
         print("Starting download... (this may take a few moments)")
         print("Progress:")
         
-        returncode = run_with_progress_bar(command, cwd=sanitized_dir)
+        returncode = run_with_progress_counter(command, cwd=sanitized_dir)
         if returncode == 0:
             print(f"✓ Extracted audio complete! Files saved in '{sanitized_dir}'.")
         else:
@@ -2792,7 +2781,7 @@ def ascii_art_converter(input_file):
                     f.write("Or install 'libcaca-utils': sudo apt install libcaca-utils\n\n")
                     
                     # Simple character representation
-                    chars = " .:-=+*#%@"
+                    chars = "$@B%&WM#oahkbdpqwmZO0QLCJUYXzcvunxrjft/|()1{[]?*-_+~<>i!lI;:,^."
                     for y in range(height//8):
                         line = ""
                         for x in range(width//4):
