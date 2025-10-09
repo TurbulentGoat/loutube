@@ -338,6 +338,29 @@ def build_base_command(url):
     
     return add_browser_cookies(command, url)
 
+def build_audio_command(url):
+    """Build command specifically for audio downloads, converting to MP3."""
+    command = ["yt-dlp"]
+    
+    # Download best audio and convert to MP3
+    command.extend([
+        "--no-config",  # Explicitly ignore ALL config files
+        "-f", "bestaudio",  # Select best audio stream only
+        "-x",  # Extract audio (convert to audio-only format)
+        "--audio-format", "mp3",  # Convert to MP3 format
+        "--audio-quality", "0",  # Best audio quality (0 = best, 9 = worst)
+        "--embed-thumbnail",  # Embed thumbnail as album art
+        "--add-metadata",  # Add metadata to the file
+    ])
+    
+    # Reduce verbose output
+    command.extend([
+        "--no-write-info-json",
+        "--progress-template", "Downloaded %(progress._downloaded_bytes_str)s of %(progress._total_bytes_str)s (%(progress._percent_str)s) at %(progress._speed_str)s ETA %(progress._eta_str)s"
+    ])
+    
+    return add_browser_cookies(command, url)
+
 def build_streaming_command(url):
     """Build yt-dlp command for streaming - excludes problematic remux options."""
     command = ["yt-dlp"]
@@ -1152,16 +1175,15 @@ def download_audio(url, output_dir=None):
         print(f"Downloading single track to folder '{folder_name}'")
         output_template = os.path.join(output_dir, "%(title)s.%(ext)s")
     
-    command = build_base_command(url)
+    command = build_audio_command(url)
     command.extend([
-        "--extract-audio",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
     ])
     
     try:
-        print(f"Downloading high-quality audio from: {url}")
+        print(f"Downloading best available audio from: {url}")
         print(f"Output directory: {output_dir}")
         print("Starting download... (this may take a few moments)")
         print("Progress:")
@@ -1174,7 +1196,7 @@ def download_audio(url, output_dir=None):
             return
         print(f"Files saved in: {output_dir}")
         print(f"To open folder: nautilus '{output_dir}' &")
-        print("Note: Audio format, quality, and metadata handled by config file.")
+        print("Note: Audio files converted to MP3 format.")
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download audio.\n{e}")
         print(f"Command that failed: {' '.join(command)}")
@@ -1220,9 +1242,8 @@ def download_audio_from_video(url, output_dir):
     os.makedirs(sanitized_dir, exist_ok=True)
     output_template = os.path.join(sanitized_dir, "%(title)s.%(ext)s")
 
-    command = build_base_command(url)
+    command = build_audio_command(url)
     command.extend([
-        "--extract-audio",
         "--yes-playlist" if is_playlist(url) else "--no-playlist",
         "-o", output_template,
         url,
@@ -3486,3 +3507,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
